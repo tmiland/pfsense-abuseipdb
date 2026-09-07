@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE packagegui SYSTEM "../schema/packages.dtd">
+<packagegui>
+	<name>pfsense_abuseipdb</name>
+	<version>0.1.0</version>
+	<title>AbuseIPDB Suricata Watcher</title>
+	<menu>
+		<name>AbuseIPDB</name>
+		<tooltiptext>AbuseIPDB Suricata Watcher status and settings</tooltiptext>
+		<section>Services</section>
+		<url>/packages/pfsense_abuseipdb/status.php</url>
+	</menu>
+	<service>
+		<name>pfsense_abuseipdb</name>
+		<rcfile>pfsense_abuseipdb</rcfile>
+		<description>AbuseIPDB Suricata Watcher</description>
+	</service>
+</packagegui>

@@ -4,6 +4,11 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 config_file="${SCRIPT_DIR}/pfsense_abuseipdb.ini"
 example_config_file="${SCRIPT_DIR}/example_pfsense_abuseipdb.ini"
 
+if [[ ! -f "$config_file" ]] && [[ -f "${SCRIPT_DIR}/../etc/pfsense_abuseipdb.ini" ]]; then
+  config_file="${SCRIPT_DIR}/../etc/pfsense_abuseipdb.ini"
+  example_config_file="${SCRIPT_DIR}/../etc/example_pfsense_abuseipdb.ini"
+fi
+
 if [[ ! -f "$config_file" ]]; then
   cp -rp "$example_config_file" "$config_file" \
     || echo "Error: Configuration file $config_file not found."; exit 1;

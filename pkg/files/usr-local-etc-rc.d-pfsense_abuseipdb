@@ -1,0 +1,81 @@
+#!/bin/sh
+#
+# pfsense_abuseipdb rc.d service for pfSense (FreeBSD).
+# Installed by pfSense-pkg-abuseipdb at /usr/local/etc/rc.d/pfsense_abuseipdb.
+#
+# PROVIDE: pfsense_abuseipdb
+# REQUIRE: LOGIN suricata
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="pfsense_abuseipdb"
+rcvar="${name}_enable"
+desc="Suricata eve.json watcher - AbuseIPDB/X-ARF/MySQL reporting"
+
+command="/usr/local/pfsense_abuseipdb/bin/pfsense_abuseipdb.sh"
+pidfile="/var/run/${name}.pid"
+logfile="/var/log/${name}_service.log"
+
+# daemon(8) runs with a minimal PATH; /usr/local/bin holds bash, jq, curl,
+# mysql, whois and uuidgen on pfSense, and the child inherits this PATH.
+PATH="/usr/local/bin:${PATH}"
+export PATH
+
+start_cmd="${name}_start"
+stop_cmd="${name}_stop"
+status_cmd="${name}_status"
+
+# daemon(8) retitles itself and the pidfile can go stale across -r restarts,
+# so process liveness is checked with pgrep -f instead.
+pfsense_abuseipdb_running() {
+  pgrep -f "${command}" >/dev/null 2>&1
+}
+
+pfsense_abuseipdb_start() {
+  if pfsense_abuseipdb_running; then
+    echo "${name} already running (pid(s): $(pgrep -f "${command}" | tr '\n' ' '))."
+    return 0
+  fi
+  rm -f "$pidfile"
+  # -f detach, -r restart the watcher if it dies
+  /usr/sbin/daemon -f -r -o "$logfile" -p "$pidfile" "$command"
+  sleep 1
+  if ! pfsense_abuseipdb_running; then
+    echo "Failed to start ${name}; see ${logfile}."
+    return 1
+  fi
+  echo "Started ${name}."
+}
+
+pfsense_abuseipdb_stop() {
+  if pfsense_abuseipdb_running; then
+    echo "Stopping ${name}..."
+    pkill -TERM -f "${command}" 2>/dev/null
+    for _ in 1 2 3 4 5; do
+      pfsense_abuseipdb_running || break
+      sleep 1
+    done
+    pfsense_abuseipdb_running && pkill -KILL -f "${command}" 2>/dev/null
+    echo "Stopped ${name}."
+  else
+    echo "${name} is not running."
+  fi
+  rm -f "$pidfile"
+  return 0
+}
+
+pfsense_abuseipdb_status() {
+  pids=$(pgrep -f "${command}" 2>/dev/null)
+  if [ -n "$pids" ]; then
+    echo "${name} is running as pid(s): $(echo "$pids" | tr '\n' ' ')"
+  else
+    echo "${name} is not running."
+    return 1
+  fi
+}
+
+load_rc_config "${name}"
+: "${pfsense_abuseipdb_enable:="NO"}"
+
+run_rc_command "$1"
