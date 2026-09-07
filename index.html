@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pfsense-abuseipdb pkg repo</title>
+<style>body{font-family:sans-serif;max-width:60em;margin:3em auto;padding:0 1em;color:#222}code,pre{background:#f4f4f4;padding:2px 4px;border-radius:4px}pre{padding:1em;overflow-x:auto}</style>
+</head>
+<body>
+<h1>pfsense-abuseipdb</h1>
+<p>FreeBSD pkg repository for <code>pfSense-pkg-abuseipdb</code> - Suricata eve.json watcher reporting to AbuseIPDB, abusix X-ARF and MySQL, with pfSense UI status and settings pages.</p>
+<p>On the pfSense host, add this repo and install:</p>
+<pre>cat &gt; /usr/local/etc/pkg/repos/pfsense-abuseipdb.conf &lt;&lt;'EOF'
+FreeBSD: { enabled: no }
+
+pfsense-abuseipdb: {
+  url: "https://tmiland.github.io/pfsense-abuseipdb/repo",
+  mirror_type: "http",
+  signature_type: "none",
+  enabled: yes
+}
+EOF
+pkg update
+pkg install -r pfsense-abuseipdb pfSense-pkg-abuseipdb</pre>
+<p>Project sources: <a href="https://github.com/tmiland/pfsense-abuseipdb">github.com/tmiland/pfsense-abuseipdb</a></p>
+</body>
+</html>
