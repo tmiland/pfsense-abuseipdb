@@ -124,8 +124,9 @@ echo "$MANIFEST" > "$META/+MANIFEST"
 pkg create -m "$META" -r "$STAGE" -o "$OUT" >/dev/null
 
 PKG_FILE=$(find "$OUT" -name "*.pkg" | head -1)
-ABI_DIR=$(echo "$ABI" | tr -d "/")
-REPO_OUT="$OUT/packages/$ABI_DIR"
+# Flat repo layout: metadata at the repo root, packages in All/
+# (pfSense pkg(8) fetches ${url}/meta.conf).
+REPO_OUT="$OUT"
 mkdir -p "$REPO_OUT/All"
 mv "$PKG_FILE" "$REPO_OUT/All/"
 (cd "$REPO_OUT" && pkg repo . >/dev/null)
