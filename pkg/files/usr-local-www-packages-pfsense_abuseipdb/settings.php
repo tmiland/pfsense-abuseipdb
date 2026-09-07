@@ -24,6 +24,7 @@ $fields = array(
     'abuseipdb_user_id' => array('AbuseIPDB user id', 'text', 'Your AbuseIPDB account id.'),
     'report_limit' => array('Report limit', 'number', 'Detections in the block log required before an IP is reported.'),
     'abuseipdb_confidense_score_limit' => array('Confidence score limit', 'number', 'AbuseIPDB confidence score required to file a report (past 90 days).'),
+    'report_cooldown' => array('Report cooldown (seconds)', 'number', 'Minimum seconds between reports for the same IP. 0 disables the cooldown.'),
     /* Mysql */
     'use_mysql' => array('Use MySQL', 'select', 'Log every report to MySQL.'),
     'domain' => array('Domain', 'text', 'Local domain used in reports.'),
@@ -92,6 +93,7 @@ function pfsense_abuseipdb_gen_ini($v) {
         "abuseipdb_user_id={$v['abuseipdb_user_id']}\n" .
         "report_limit={$v['report_limit']}\n" .
         "abuseipdb_confidense_score_limit={$v['abuseipdb_confidense_score_limit']}\n" .
+        "report_cooldown={$v['report_cooldown']}\n" .
         "domain={$v['domain']}\n" .
         "mysql_host={$v['mysql_host']}\n" .
         "mysql_user={$v['mysql_user']}\n" .
@@ -125,6 +127,9 @@ foreach ($fields as $key => $f) {
     if ($vals[$key] === '' && isset($ini_vals[$key])) {
         $vals[$key] = $ini_vals[$key];
     }
+}
+if ($vals['report_cooldown'] === '') {
+    $vals['report_cooldown'] = '900';
 }
 
 $input_errors = array();

@@ -34,6 +34,7 @@ wan=$(config_grep wan)
 abuseipdb_user_id=$(config_grep abuseipdb_user_id)
 report_limit=$(config_grep report_limit)
 abuseipdb_confidense_score_limit=$(config_grep abuseipdb_confidense_score_limit)
+report_cooldown=$(config_grep report_cooldown)
 
 # Mysql database
 domain=$(config_grep domain)
@@ -494,6 +495,18 @@ Abuse email     : ${whois_contact_email}
 
     if [ "$ip_block_logged" = "yes" ]; then
       if [ "${block_log_count:-0}" -gt "${report_limit}" ]; then
+        # Skip if the IP was already reported within the cooldown window
+        if [ "${report_cooldown:-900}" -gt 0 ]; then
+          last_reported=$(grep "Reporting IP: ${ip} with comment" "${block_log_file}" 2>/dev/null | tail -n 1 | awk '{print $1, $2}') || true
+          if [ -n "${last_reported}" ]; then
+            last_reported_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "${last_reported}" +%s 2>/dev/null || date -d "${last_reported}" +%s 2>/dev/null || echo 0)
+            now_epoch=$(date +%s)
+            if [ "${last_reported_epoch:-0}" -gt 0 ] && [ "$((now_epoch - last_reported_epoch))" -lt "${report_cooldown:-900}" ]; then
+              echo "IP ${ip} was reported $((now_epoch - last_reported_epoch)) seconds ago, cooldown is ${report_cooldown:-900} seconds. Skipping..."
+              continue
+            fi
+          fi
+        fi
         #   # Extract relevant logs for the current IP
         #   ip_logs=$(cat "$block_log_file" | grep "$ip")
         #   # Construct the comment string for
