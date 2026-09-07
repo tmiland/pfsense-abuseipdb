@@ -94,6 +94,44 @@ ssh root@pfsense service pfsense_abuseipdb start   # also: stop, status, restart
 `status`/`stop` find the watcher via `pgrep -f`, since daemon(8) retitles
 its process and its pidfile goes stale across `-r` restarts.
 
+## pfSense package (recommended)
+
+`pkg/build.sh` builds `pfSense-pkg-abuseipdb` (run it on a pfSense host so
+the ABI matches) and publishes-ready repo metadata to
+`/tmp/pfsense-abuseipdb-repo-out`. The artifacts live on the `gh-pages`
+branch and are served at:
+
+    https://tmiland.github.io/pfsense-abuseipdb/repo
+
+The package installs the script, ini, rc.d service, the pfSense package
+manifest, and two web UI pages (**Services → AbuseIPDB**: Status +
+Settings). The settings page stores values in config.xml, regenerates the
+ini on save and restarts the watcher. Install/remove also registers and
+unregisters the service and menu entries.
+
+Note: pfSense pins the Package Manager "Available Packages" tab to the
+official Netgate repo, so the package is installed from the CLI (updates
+afterwards work through `pkg upgrade`):
+
+```sh
+ssh root@pfsense
+cat > /usr/local/etc/pkg/repos/pfsense-abuseipdb.conf <<'EOF'
+FreeBSD: { enabled: no }
+
+pfsense-abuseipdb: {
+  url: "https://tmiland.github.io/pfsense-abuseipdb/repo",
+  mirror_type: "NONE",
+  signature_type: "none",
+  enabled: yes
+}
+EOF
+pkg update -r pfsense-abuseipdb
+pkg install -y -r pfsense-abuseipdb pfSense-pkg-abuseipdb
+```
+
+Manual (non-package) deployments in `/root/scripts/` keep working; the
+package migrates an existing ini on install and stops the manual watcher.
+
 ## Block log
 
 Every processed alert is appended to `/var/log/abuseipdb_block.log`; the
