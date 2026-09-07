@@ -76,6 +76,24 @@ The debug argument enables strict shell modes and tracing. Note that even
 in debug mode the loop is live: it processes the newest alerts immediately
 and sends real reports.
 
+## Service (pfSense / FreeBSD)
+
+pfSense has no systemd; the equivalent service file is the rc.d script
+`pfsense_abuseipdb` in this repo. It runs the watcher under `daemon(8)`
+(`-r` restarts it if it dies), logs stdout to
+`/var/log/pfsense_abuseipdb_service.log`, and exports `/usr/local/bin` in
+PATH for the child.
+
+```sh
+scp pfsense_abuseipdb root@pfsense:/usr/local/etc/rc.d/pfsense_abuseipdb
+ssh root@pfsense chmod 755 /usr/local/etc/rc.d/pfsense_abuseipdb
+ssh root@pfsense sysrc pfsense_abuseipdb_enable=YES
+ssh root@pfsense service pfsense_abuseipdb start   # also: stop, status, restart
+```
+
+`status`/`stop` find the watcher via `pgrep -f`, since daemon(8) retitles
+its process and its pidfile goes stale across `-r` restarts.
+
 ## Block log
 
 Every processed alert is appended to `/var/log/abuseipdb_block.log`; the
