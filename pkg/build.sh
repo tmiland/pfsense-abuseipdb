@@ -28,6 +28,8 @@ install -m 0755 "$PKGDIR/files/usr-local-etc-rc.d-pfsense_abuseipdb" \
 	"$STAGE/usr/local/etc/rc.d/pfsense_abuseipdb"
 install -m 0644 "$PKGDIR/files/usr-local-www-packages-pfsense_abuseipdb/status.php" \
 	"$STAGE/$WBASE/status.php"
+install -m 0644 "$PKGDIR/files/usr-local-www-packages-pfsense_abuseipdb/reports.php" \
+	"$STAGE/$WBASE/reports.php"
 install -m 0644 "$PKGDIR/files/usr-local-www-packages-pfsense_abuseipdb/settings.php" \
 	"$STAGE/$WBASE/settings.php"
 
