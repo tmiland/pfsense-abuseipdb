@@ -55,6 +55,12 @@ report_limit=$(config_grep report_limit)
 abuseipdb_confidense_score_limit=$(config_grep abuseipdb_confidense_score_limit)
 report_cooldown=$(config_grep report_cooldown)
 notifications=$(config_grep notifications)
+detection_source=$(config_grep detection_source)
+if [ "${detection_source}" == "pf" ]; then
+  detection_label="pf Firewall Detected"
+else
+  detection_label="Suricata Detected"
+fi
 
 # Mysql database
 domain=$(config_grep domain)
@@ -579,7 +585,7 @@ Abuse email     : ${whois_contact_email}
         # cooldown, so the scan cost is acceptable
         logs=$(grep -F "${ip}" "${ALERTS_FILE}" 2>/dev/null || true)
         # Construct the comment string for other triggers
-        comment="Suricata Detected ${block_log_count} attacks from $ip.; ${message}; IP: ${ip}; Ports: ${ports}; Direction: ${direction}; Trigger: ${signature_category}; Category: ${category}; Severity: ${severity}"
+        comment="${detection_label} ${block_log_count} attacks from $ip.; ${message}; IP: ${ip}; Ports: ${ports}; Direction: ${direction}; Trigger: ${signature_category}; Category: ${category}; Severity: ${severity}"
 
         ABUSEIPDB_CHECK=$(curl -sG https://api.abuseipdb.com/api/v2/check \
             --data-urlencode "ipAddress=$ip" \
