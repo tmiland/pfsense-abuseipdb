@@ -16,49 +16,57 @@ require_once("guiconfig.inc");
 $ini_file = '/usr/local/pfsense_abuseipdb/etc/pfsense_abuseipdb.ini';
 $rcd = '/usr/local/etc/rc.d/pfsense_abuseipdb';
 
-/* key => array(label, type, help) */
+/* Settings grouped into tabs: key => array(label, type, help, tab) */
+$tabs = array(
+    'general' => 'General',
+    'abuseipdb' => 'AbuseIPDB',
+    'lookups' => 'Lookups',
+    'mysql' => 'MySQL',
+    'email' => 'Email',
+    'xarf' => 'X-ARF'
+);
+
 $fields = array(
-    /* Suricata */
-    'alerts_file' => array('Suricata eve.json path', 'text', 'Path to the eve.json alert log.'),
-    'block_log_file' => array('Block log path', 'text', 'Per-IP detection log that drives the reporting threshold.'),
-    'wan' => array('WAN interface', 'text', 'Interface name, e.g. igb0.'),
+    /* General */
+    'alerts_file' => array('Suricata eve.json path', 'text', 'Path to the eve.json alert log.', 'general'),
+    'block_log_file' => array('Block log path', 'text', 'Per-IP detection log that drives the reporting threshold.', 'general'),
+    'wan' => array('WAN interface', 'text', 'Interface name, e.g. igb0.', 'general'),
+    'domain' => array('Domain', 'text', 'Local domain used in reports.', 'general'),
+    'notifications' => array('pfSense notifications', 'select', 'Notify the admin via System > Advanced > Notifications channels on report errors (max 1 per hour).', 'general'),
+    'suricata_whitelists' => array('Whitelist pf tables', 'text', 'Comma-separated pf table names used to whitelist source IPs.', 'general'),
+    'pfsense_token' => array('pfSense API token', 'secret', 'Used by the (optional) filterlog section.', 'general'),
+    'pfsense_url' => array('pfSense API URL', 'text', '', 'general'),
+    'gmail_app_password' => array('Gmail app password', 'secret', 'Reserved for future use.', 'general'),
     /* AbuseIPDB */
-    'abuseipdb_token' => array('AbuseIPDB API token', 'secret', 'Reported comments carry a link back to the project.'),
-    'abuseipdb_user_id' => array('AbuseIPDB user id', 'text', 'Your AbuseIPDB account id.'),
-    'report_limit' => array('Report limit', 'number', 'Detections in the block log required before an IP is reported.'),
-    'abuseipdb_confidense_score_limit' => array('Confidence score limit', 'number', 'AbuseIPDB confidence score required to file a report (past 90 days).'),
-    'report_cooldown' => array('Report cooldown (seconds)', 'number', 'Minimum seconds between reports for the same IP. 0 disables the cooldown.'),
-    'notifications' => array('pfSense notifications', 'select', 'Notify the admin via System > Advanced > Notifications channels on report errors (max 1 per hour).'),
-    /* Mysql */
-    'use_mysql' => array('Use MySQL', 'select', 'Log every report to MySQL.'),
-    'domain' => array('Domain', 'text', 'Local domain used in reports.'),
-    'mysql_host' => array('MySQL host', 'text', ''),
-    'mysql_user' => array('MySQL user', 'text', ''),
-    'mysql_password' => array('MySQL password', 'secret', 'Migrated from the legacy password file on save.'),
-    'mysql_database' => array('MySQL database', 'text', ''),
-    /* ipinfo */
-    'ipinfo_token' => array('ipinfo token', 'secret', ''),
-    'show_ip_info' => array('Show IP info', 'select', 'GeoIP lookup for each alert.'),
-    'show_ip_abusedb_email' => array('Show abuse contact', 'select', 'WHOIS abuse-mailbox lookup for each alert.'),
+    'abuseipdb_token' => array('AbuseIPDB API token', 'secret', 'Reported comments carry a link back to the project.', 'abuseipdb'),
+    'abuseipdb_user_id' => array('AbuseIPDB user id', 'text', 'Your AbuseIPDB account id.', 'abuseipdb'),
+    'report_limit' => array('Report limit', 'number', 'Detections in the block log required before an IP is reported.', 'abuseipdb'),
+    'abuseipdb_confidense_score_limit' => array('Confidence score limit', 'number', 'AbuseIPDB confidence score required to file a report (past 90 days).', 'abuseipdb'),
+    'report_cooldown' => array('Report cooldown (seconds)', 'number', 'Minimum seconds between reports for the same IP. 0 disables the cooldown.', 'abuseipdb'),
+    /* Lookups */
+    'ipinfo_token' => array('ipinfo token', 'secret', '', 'lookups'),
+    'show_ip_info' => array('Show IP info', 'select', 'GeoIP lookup for each alert.', 'lookups'),
+    'show_ip_abusedb_email' => array('Show abuse contact', 'select', 'WHOIS abuse-mailbox lookup for each alert.', 'lookups'),
+    /* MySQL */
+    'use_mysql' => array('Use MySQL', 'select', 'Log every report to MySQL.', 'mysql'),
+    'mysql_host' => array('MySQL host', 'text', '', 'mysql'),
+    'mysql_user' => array('MySQL user', 'text', '', 'mysql'),
+    'mysql_password' => array('MySQL password', 'secret', 'Migrated from the legacy password file on save.', 'mysql'),
+    'mysql_database' => array('MySQL database', 'text', '', 'mysql'),
     /* Email */
-    'send_abuse_email_report' => array('Send abuse email', 'select', 'Email the WHOIS abuse contact.'),
-    'email_report_limit' => array('Email report limit', 'number', 'Detections required before an abuse email is sent.'),
-    'report_name' => array('Report name', 'text', 'Display name of the email sender.'),
-    'report_email' => array('Report email', 'text', 'From address for abuse emails.'),
-    'abuse_email_password' => array('Abuse email password', 'secret', 'SMTP password for abuse email reports.'),
-    'report_smtp_host' => array('SMTP host', 'text', ''),
-    'report_smtp_port' => array('SMTP port', 'number', ''),
+    'send_abuse_email_report' => array('Send abuse email', 'select', 'Email the WHOIS abuse contact.', 'email'),
+    'email_report_limit' => array('Email report limit', 'number', 'Detections required before an abuse email is sent.', 'email'),
+    'report_name' => array('Report name', 'text', 'Display name of the email sender.', 'email'),
+    'report_email' => array('Report email', 'text', 'From address for abuse emails.', 'email'),
+    'abuse_email_password' => array('Abuse email password', 'secret', 'SMTP password for abuse email reports.', 'email'),
+    'report_smtp_host' => array('SMTP host', 'text', '', 'email'),
+    'report_smtp_port' => array('SMTP port', 'number', '', 'email'),
     /* X-ARF */
-    'send_xarf_report' => array('Send X-ARF reports', 'select', 'Report to abusix via X-ARF.'),
-    'xarf_token' => array('X-ARF API key', 'secret', 'Abusix datachannels API key.'),
-    'xarf_org' => array('X-ARF org', 'text', ''),
-    'xarf_contact' => array('X-ARF contact', 'text', 'Abuse contact address sent with X-ARF reports.'),
-    'xarf_domain' => array('X-ARF domain', 'text', ''),
-    /* Whitelists + misc */
-    'suricata_whitelists' => array('Whitelist pf tables', 'text', 'Comma-separated pf table names used to whitelist source IPs.'),
-    'pfsense_token' => array('pfSense API token', 'secret', 'Used by the (optional) filterlog section.'),
-    'pfsense_url' => array('pfSense API URL', 'text', ''),
-    'gmail_app_password' => array('Gmail app password', 'secret', 'Reserved for future use.')
+    'send_xarf_report' => array('Send X-ARF reports', 'select', 'Report to abusix via X-ARF.', 'xarf'),
+    'xarf_token' => array('X-ARF API key', 'secret', 'Abusix datachannels API key.', 'xarf'),
+    'xarf_org' => array('X-ARF org', 'text', '', 'xarf'),
+    'xarf_contact' => array('X-ARF contact', 'text', 'Abuse contact address sent with X-ARF reports.', 'xarf'),
+    'xarf_domain' => array('X-ARF domain', 'text', '', 'xarf')
 );
 
 /* Yes/no toggles render as selects. */
@@ -243,34 +251,45 @@ if (!empty($input_errors)) {
 	<div class="panel panel-default">
 		<div class="panel-heading"><h2 class="panel-title"><?= gettext('AbuseIPDB Suricata Watcher settings') ?></h2></div>
 		<div class="panel-body">
-			<div class="table-responsive">
-				<table class="table table-striped table-hover">
-					<tbody>
-<?php foreach ($fields as $key => $f): ?>
-						<tr>
-							<td style="width: 30%;">
-								<strong><?= htmlspecialchars($f[0]) ?></strong><br />
-								<code class="abuseipdb-key"><?= htmlspecialchars($key) ?></code>
-							</td>
-							<td>
+			<ul class="nav nav-tabs">
+<?php $first = true; foreach ($tabs as $tid => $tname): ?>
+				<li<?= $first ? ' class="active"' : '' ?>><a data-toggle="tab" href="#<?= htmlspecialchars($tid) ?>"><?= htmlspecialchars($tname) ?></a></li>
+<?php $first = false; endforeach ?>
+			</ul>
+			<div class="tab-content" style="padding-top: 10px;">
+<?php $first = true; foreach ($tabs as $tid => $tname): ?>
+				<div class="tab-pane<?= $first ? ' active' : '' ?>" id="<?= htmlspecialchars($tid) ?>">
+					<div class="table-responsive">
+						<table class="table table-striped table-hover">
+							<tbody>
+<?php foreach ($fields as $key => $f): if ($f[3] !== $tid) { continue; } ?>
+								<tr>
+									<td style="width: 30%;">
+										<strong><?= htmlspecialchars($f[0]) ?></strong><br />
+										<code class="abuseipdb-key"><?= htmlspecialchars($key) ?></code>
+									</td>
+									<td>
 <?php if ($f[1] == 'select'): ?>
-								<select class="form-control" name="<?= htmlspecialchars($key) ?>">
-									<option value="yes" <?= ($vals[$key] == 'yes') ? 'selected' : '' ?>><?= gettext('yes') ?></option>
-									<option value="no" <?= ($vals[$key] != 'yes') ? 'selected' : '' ?>><?= gettext('no') ?></option>
-								</select>
+										<select class="form-control" name="<?= htmlspecialchars($key) ?>">
+											<option value="yes" <?= ($vals[$key] == 'yes') ? 'selected' : '' ?>><?= gettext('yes') ?></option>
+											<option value="no" <?= ($vals[$key] != 'yes') ? 'selected' : '' ?>><?= gettext('no') ?></option>
+										</select>
 <?php elseif ($f[1] == 'secret'): ?>
-								<input class="form-control" type="password" name="<?= htmlspecialchars($key) ?>" value="" autocomplete="new-password" placeholder="<?= ($vals[$key] !== '') ? gettext('(stored - leave blank to keep)') : gettext('(blank - migrated from legacy file on save)') ?>" />
+										<input class="form-control" type="password" name="<?= htmlspecialchars($key) ?>" value="" autocomplete="new-password" placeholder="<?= ($vals[$key] !== '') ? gettext('(stored - leave blank to keep)') : gettext('(blank - migrated from legacy file on save)') ?>" />
 <?php else: ?>
-								<input class="form-control" type="text" name="<?= htmlspecialchars($key) ?>" value="<?= htmlspecialchars($vals[$key]) ?>" autocomplete="off" />
+										<input class="form-control" type="text" name="<?= htmlspecialchars($key) ?>" value="<?= htmlspecialchars($vals[$key]) ?>" autocomplete="off" />
 <?php endif ?>
 <?php if (!empty($f[2])): ?>
-								<span class="help-block"><?= htmlspecialchars($f[2]) ?></span>
+										<span class="help-block"><?= htmlspecialchars($f[2]) ?></span>
 <?php endif ?>
-							</td>
-						</tr>
+									</td>
+								</tr>
 <?php endforeach ?>
-					</tbody>
-				</table>
+							</tbody>
+						</table>
+					</div>
+				</div>
+<?php $first = false; endforeach ?>
 			</div>
 		</div>
 		<div class="panel-footer">
@@ -278,7 +297,7 @@ if (!empty($input_errors)) {
 				<i class="fa fa-save icon-embed-btn"></i><?= gettext('Save and restart watcher') ?>
 			</button>
 			<span class="help-block">
-				<?= gettext('Secrets are stored in the pfSense config (masked here, never echoed back). Leave a secret blank to keep its stored value; secrets still living in /root/.credentials/ files are migrated in automatically on save. Note: pfSense config backups (AutoConfigBackup) will include these values.') ?>
+				<?= gettext('All tabs are saved together. Secrets are stored in the pfSense config (masked here, never echoed back). Leave a secret blank to keep its stored value; secrets still living in /root/.credentials/ files are migrated in automatically on save. Note: pfSense config backups (AutoConfigBackup) will include these values.') ?>
 			</span>
 		</div>
 	</div>

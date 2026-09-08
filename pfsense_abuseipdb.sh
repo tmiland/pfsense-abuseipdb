@@ -573,7 +573,9 @@ Abuse email     : ${whois_contact_email}
         # else
         # Extract relevant logs for the current IP (last 10 MB is plenty of
         # fresh evidence and keeps X-ARF payloads sane)
-        logs=$(tail -c 10000000 "${ALERTS_FILE}" 2>/dev/null | grep -F "${ip}" || true)
+        # Full-file evidence grep (X-ARF payload); reports are rare after the
+        # cooldown, so the scan cost is acceptable
+        logs=$(grep -F "${ip}" "${ALERTS_FILE}" 2>/dev/null || true)
         # Construct the comment string for other triggers
         comment="Suricata Detected ${block_log_count} attacks from $ip.; ${message}; IP: ${ip}; Ports: ${ports}; Direction: ${direction}; Trigger: ${signature_category}; Category: ${category}; Severity: ${severity}"
 
@@ -621,9 +623,18 @@ Abuse email     : ${whois_contact_email}
         # then
         log_operation "Reporting IP: ${ip} with comment: ${comment}"
 
-        # Append the project credit and keep the AbuseIPDB 1024-char limit
+        # Include the most recent alert line before the credit, keeping the
+        # AbuseIPDB 1024-char limit
         report_credit="Reported by pfsense-abuseipdb: https://github.com/tmiland/pfsense-abuseipdb"
         max_comment=$((1024 - ${#report_credit} - 1))
+        if [ -n "${logs}" ]; then
+          last_log=$(printf '%s\n' "${logs}" | tail -n 1)
+          logs_budget=$((max_comment - ${#comment} - 8))
+          if [ ${logs_budget} -gt 40 ]; then
+            logs_start=$(( ${#last_log} > logs_budget ? ${#last_log} - logs_budget : 0 ))
+            comment="${comment}; Logs: ${last_log:${logs_start}}"
+          fi
+        fi
         if [[ ${#comment} -gt ${max_comment} ]]; then
           log_operation "Truncated comment to ${max_comment} characters..."
           comment=${comment:0:max_comment}
