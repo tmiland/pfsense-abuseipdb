@@ -172,6 +172,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 $pgtitle = array(gettext("Services"), gettext("AbuseIPDB"), gettext("Settings"));
 include("head.inc");
 
+/* Theme-agnostic styling: inherit colors so both light and dark themes work. */
+?>
+<style>
+	code.abuseipdb-key {
+		background: transparent;
+		color: inherit;
+		padding: 0;
+		font-size: 85%;
+	}
+</style>
+<?php
+
 $tab_array = array();
 $tab_array[] = array(gettext("Status"), false, "/packages/pfsense_abuseipdb/status.php");
 $tab_array[] = array(gettext("Settings"), true, "/packages/pfsense_abuseipdb/settings.php");
@@ -196,7 +208,7 @@ if (!empty($input_errors)) {
 						<tr>
 							<td style="width: 30%;">
 								<strong><?= htmlspecialchars($f[0]) ?></strong><br />
-								<code><?= htmlspecialchars($key) ?></code>
+								<code class="abuseipdb-key"><?= htmlspecialchars($key) ?></code>
 							</td>
 							<td>
 <?php if ($f[1] == 'select'): ?>

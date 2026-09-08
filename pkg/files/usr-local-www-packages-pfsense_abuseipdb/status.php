@@ -10,6 +10,26 @@ require_once("service-utils.inc");
 $pgtitle = array(gettext("Services"), gettext("AbuseIPDB"), gettext("Status"));
 include("head.inc");
 
+/* Theme-agnostic styling: inherit colors so both light and dark themes work. */
+?>
+<style>
+	pre.abuseipdb-log {
+		background: transparent;
+		color: inherit;
+		border: 1px solid currentColor;
+		border-radius: 4px;
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
+	}
+	td.abuseipdb-error {
+		font-weight: 700;
+	}
+	td.abuseipdb-muted {
+		opacity: 0.65;
+	}
+</style>
+<?php
+
 $tab_array = array();
 $tab_array[] = array(gettext("Status"), true, "/packages/pfsense_abuseipdb/status.php");
 $tab_array[] = array(gettext("Settings"), false, "/packages/pfsense_abuseipdb/settings.php");
@@ -27,7 +47,7 @@ $event_patterns = array(
     'AbuseIPDB Confidence Score:' => 'info',
     'Response:' => 'muted',
     'X-ARF Response:' => 'info',
-    'ERROR' => 'danger',
+    'ERROR' => 'error',
     'Trigger:' => 'muted',
     'JSON is' => 'muted'
 );
@@ -56,7 +76,7 @@ if (file_exists($block_log)) {
             if (strpos($m[2], 'X-ARF Response') !== false && strpos($m[2], '"success"') !== false) {
                 $stats['xarf_ok']++;
             }
-            if ($type == 'danger') {
+            if ($type == 'error') {
                 $stats['errors']++;
             }
         }
@@ -127,7 +147,7 @@ $events = array_reverse($events);
 <?php foreach ($events as $e): ?>
 					<tr>
 						<td style="white-space: nowrap;"><?= htmlspecialchars($e['ts']) ?></td>
-						<td class="<?= ($e['class'] == 'danger') ? 'text-danger' : (($e['class'] == 'info') ? 'text-info' : 'text-muted') ?>">
+						<td class="<?= ($e['class'] == 'error') ? 'abuseipdb-error' : (($e['class'] == 'muted') ? 'abuseipdb-muted' : '') ?>">
 							<?= htmlspecialchars($e['msg']) ?>
 						</td>
 					</tr>
@@ -141,7 +161,7 @@ $events = array_reverse($events);
 <div class="panel panel-default">
 	<div class="panel-heading"><h2 class="panel-title"><?= gettext('Service log tail') ?></h2></div>
 	<div class="panel-body">
-		<pre><?= htmlspecialchars(implode("\n", array_slice(explode("\n", shell_exec("tail -n 40 " . escapeshellarg($service_log) . " 2>/dev/null")), -40))) ?></pre>
+		<pre class="abuseipdb-log"><?= htmlspecialchars(implode("\n", array_slice(explode("\n", shell_exec("tail -n 40 " . escapeshellarg($service_log) . " 2>/dev/null")), -40))) ?></pre>
 	</div>
 </div>
 
