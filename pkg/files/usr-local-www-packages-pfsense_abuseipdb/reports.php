@@ -2,7 +2,7 @@
 /*
  * reports.php
  *
- * Report browser for the AbuseIPDB Suricata Watcher package. Each entry in
+ * Report browser for the AbuseIPDB Watcher package. Each entry in
  * /var/log/abuseipdb_reports.log (JSON, written by the watcher on every
  * successful report) is shown as a collapsible panel with the full comment
  * (including the alert log excerpt) and the AbuseIPDB / X-ARF responses.

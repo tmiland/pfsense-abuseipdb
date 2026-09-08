@@ -2,7 +2,7 @@
 /*
  * settings.php
  *
- * Settings page for the AbuseIPDB Suricata Watcher package. Values are
+ * Settings page for the AbuseIPDB Watcher package. Values are
  * stored in config.xml (installedpackages/pfsense_abuseipdb/settings) and
  * generated into the package ini on save, then the service is restarted.
  * Secrets are entered here (masked) and stored in config.xml; on save,
@@ -283,7 +283,7 @@ if (!empty($input_errors)) {
 
 <form action="settings.php" method="post">
 	<div class="panel panel-default">
-		<div class="panel-heading"><h2 class="panel-title"><?= gettext('AbuseIPDB Suricata Watcher settings') ?></h2></div>
+		<div class="panel-heading"><h2 class="panel-title"><?= gettext('AbuseIPDB Watcher settings') ?></h2></div>
 		<div class="panel-body">
 			<ul class="nav nav-tabs">
 <?php $first = true; foreach ($tabs as $tid => $tname): ?>

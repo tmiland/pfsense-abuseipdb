@@ -2,17 +2,17 @@
 <!DOCTYPE packagegui SYSTEM "../schema/packages.dtd">
 <packagegui>
 	<name>pfsense_abuseipdb</name>
-	<version>0.8.3</version>
-	<title>AbuseIPDB Suricata Watcher</title>
+	<version>0.8.4</version>
+	<title>AbuseIPDB Watcher</title>
 	<menu>
 		<name>AbuseIPDB</name>
-		<tooltiptext>AbuseIPDB Suricata Watcher status and settings</tooltiptext>
+		<tooltiptext>AbuseIPDB Watcher status and settings</tooltiptext>
 		<section>Services</section>
 		<url>/packages/pfsense_abuseipdb/status.php</url>
 	</menu>
 	<service>
 		<name>pfsense_abuseipdb</name>
 		<rcfile>pfsense_abuseipdb</rcfile>
-		<description>AbuseIPDB Suricata Watcher</description>
+		<description>AbuseIPDB Watcher</description>
 	</service>
 </packagegui>

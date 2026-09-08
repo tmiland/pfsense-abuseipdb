@@ -2,7 +2,7 @@
 /*
  * status.php
  *
- * Status page for the AbuseIPDB Suricata Watcher package. Split into
+ * Status page for the AbuseIPDB Watcher package. Split into
  * sub-views (Overview / Events / Blocked IPs / Service log) selectable via
  * the "view" URL parameter; the Activity-today counters link into the
  * filtered Events view.
@@ -27,14 +27,22 @@ $running = is_service_running('pfsense_abuseipdb');
 
 /* DDoS protection: blocked IPs (only when the toggle is on) */
 $protection = '';
+$detection_source = '';
 $pkg_ini = '/usr/local/pfsense_abuseipdb/etc/pfsense_abuseipdb.ini';
 if (file_exists($pkg_ini)) {
     foreach (file($pkg_ini, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $l) {
         if (preg_match('/^protection=(.*)$/', $l, $m)) {
             $protection = trim($m[1]);
+        } elseif (preg_match('/^detection_source=(.*)$/', $l, $m)) {
+            $detection_source = trim($m[1]);
         }
     }
 }
+$detection_labels = array(
+    'pf' => gettext('pf firewall block events (native)'),
+    'suricata' => gettext('Suricata alert stream'),
+);
+$detection_label = $detection_labels[$detection_source] ?? gettext('Suricata alert stream');
 $blocked = array();
 if ($protection === 'yes') {
     exec("/sbin/pfctl -t abuseipdb_block -T show 2>/dev/null", $blocked);
@@ -116,7 +124,8 @@ $events = array_reverse($events);
 	td.abuseipdb-error {
 		font-weight: 700;
 	}
-	td.abuseipdb-muted {
+	td.abuseipdb-muted,
+	.abuseipdb-muted {
 		opacity: 0.65;
 	}
 	a.abuseipdb-card, a.abuseipdb-card:hover {
@@ -144,12 +153,13 @@ $subtabs = array(
 
 <?php if (!$running): ?>
 	<div class="alert alert-warning">
-		<strong><?= gettext('The AbuseIPDB Suricata Watcher service is not running.') ?></strong>
+		<strong><?= gettext('The AbuseIPDB Watcher service is not running.') ?></strong>
 		<?= gettext('Start it from') ?> <a href="status_services.php"><?= gettext('Status &gt; Services') ?></a>.
 	</div>
 <?php else: ?>
 	<div class="alert alert-success">
-		<strong><?= gettext('AbuseIPDB Suricata Watcher is running.') ?></strong>
+		<strong><?= gettext('AbuseIPDB Watcher is running.') ?></strong>
+		<span class="abuseipdb-muted">&middot; <?= gettext('Detection source') ?>: <?= htmlspecialchars($detection_label) ?></span>
 	</div>
 <?php endif; ?>
 

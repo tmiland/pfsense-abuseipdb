@@ -16,13 +16,13 @@ $name = 'pfsense_abuseipdb';
 $svc = array(
     'name' => $name,
     'rcfile' => 'pfsense_abuseipdb',
-    'description' => 'AbuseIPDB Suricata Watcher',
+    'description' => 'AbuseIPDB Watcher',
     'custom_php_service_status_command' =>
         'exec("/usr/bin/pgrep -f pfsense_abuseipdb.sh", $o); $rc = (count($o) > 1);'
 );
 $menu = array(
     'name' => 'AbuseIPDB',
-    'tooltiptext' => 'AbuseIPDB Suricata Watcher status and settings',
+    'tooltiptext' => 'AbuseIPDB Watcher status and settings',
     'section' => 'Services',
     'url' => '/packages/pfsense_abuseipdb/status.php'
 );
