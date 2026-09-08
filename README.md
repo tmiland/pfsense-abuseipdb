@@ -9,22 +9,24 @@
 </p>
 
 <p align="center">
-  Suricata alert watcher for pfSense that reports attacker IPs to
+  Abuse reporting and DDoS protection for pfSense: reports attacker IPs to
   <a href="https://www.abuseipdb.com">AbuseIPDB</a>, files X-ARF reports with
-  <a href="https://abusix.com">Abusix</a>, and logs every report to MySQL —
-  with a native pfSense web UI.
+  <a href="https://abusix.com">Abusix</a>, logs every report to MySQL, and
+  auto-bans burst offenders via a pf table — all managed from a native web
+  UI. Works with or without Suricata.
 </p>
 
 ---
 
 ## Features
 
-- **Live watcher** — tails the Suricata `eve.json` alert log and parses every alert safely (comma-proof field parsing)
-- **AbuseIPDB reporting** — category-mapped reports with confidence-score gating and a per-IP cooldown
+- **DDoS protection engine** — burst-detects attackers from native pf firewall events (no Suricata required) or the Suricata alert stream, and bans them via a pf table with automatic expiry, whitelist awareness and a hard entry cap
+- **AbuseIPDB reporting** — category-mapped reports with confidence-score gating, per-IP cooldown, and a credit link back to this project
 - **X-ARF to Abusix** — structured abuse reports with alert evidence attached
 - **MySQL logging** — every report stored for history and deduplication
 - **GeoIP + WHOIS** — ipinfo.io lookup and WHOIS abuse-contact resolution, cached per IP
-- **Native pfSense UI** — Status and Settings pages under **Services → AbuseIPDB**, theme-aware (light and dark)
+- **Native pfSense UI** — three pages under **Services → AbuseIPDB** (Status, Reports, Settings) with tabbed, theme-aware views for light and dark themes
+- **pfSense notifications** — report errors and X-ARF failures alert you through the built-in notification channels (email/Telegram), throttled
 - **Proper FreeBSD service** — rc.d script with crash-restart and log rotation
 - **Installable package** — `pfSense-pkg-abuseipdb` from a hosted pkg repo
 
@@ -37,7 +39,7 @@
 - [Web UI](#web-ui)
 - [Service management](#service-management)
 - [Manual install](#manual-install)
-- [Block log and cooldown](#block-log-and-cooldown)
+- [Block log, cooldown and protection](#block-log-cooldown-and-protection)
 - [Credits](#credits)
 - [License](#license)
 
@@ -69,49 +71,48 @@ That's it — the watcher starts automatically and appears under
 
 ## How it works
 
-1. `tail -f eve.json` — each alert parsed into timestamp, IPs, ports, signature, category, severity, direction
-2. Optional ipinfo.io GeoIP lookup and WHOIS abuse-mailbox lookup for the source IP (cached per IP)
-3. Skips alerts whose source IP is in a pf table listed in `suricata_whitelists`
-4. Skips traffic not `to_server`, alerts sourced from the WAN IP itself, and IPv6 sources (for now)
-5. Maps the ET signature category to AbuseIPDB category codes and X-ARF types
-6. Once an IP has more than `report_limit` block-log entries, is outside its
-   `report_cooldown` window, and has AbuseIPDB confidence above
-   `abuseipdb_confidense_score_limit`: file the report (comments carry a
-   credit link back to this repo), insert into MySQL, optionally email the
-   WHOIS abuse contact, and send an X-ARF report
+Two engines run side by side as FreeBSD services:
 
-AbuseIPDB report errors and invalid X-ARF payloads can fire a pfSense
-notification (all configured channels, throttled to one per hour) via the
-`notifications` setting.
+**Reporting watcher** — tails the alert log, parses each alert safely
+(comma-proof field parsing), resolves GeoIP + WHOIS abuse contacts (cached),
+and once an IP has more than `report_limit` block-log entries, is outside
+its `report_cooldown` window, and has AbuseIPDB confidence above the limit:
+files a categorized report (comments carry a credit link and a log excerpt),
+inserts into MySQL, optionally emails the WHOIS abuse contact, and sends an
+X-ARF report with the evidence attached.
+
+**Protection engine** — counts blocked packets (native pf `filter.log`) or
+Suricata alerts per source IP in a sliding window. When an IP crosses
+`protection_threshold` within `protection_window` seconds it is added to the
+`abuseipdb_block` pf table (referenced by an auto-created floating WAN block
+rule) for `ban_time` seconds. Whitelist tables, private/LAN addresses and
+the WAN IP are never banned, and a hard cap keeps a flood from exhausting
+memory.
 
 ## Requirements
 
 Installed on pfSense (FreeBSD): `bash`, `jq`, `curl`, `whois`, `mysql`
-client, `uuidgen`, `pfctl`, GNU `base64`. A MySQL/MariaDB server reachable
-from the firewall with a `reports` table.
+client, `uuidgen`, `pfctl`. A MySQL/MariaDB server reachable from the
+firewall with a `reports` table (for the MySQL logging feature).
+
+Suricata is **optional**: the protection engine works on native pf firewall
+events by default. Install/enable Suricata and set `detection_source=suricata`
+for alert-based detection and reporting.
 
 ## Configuration
 
 All settings live in `pfsense_abuseipdb.ini` next to the script (or edit
 them in the web UI — values are stored in config.xml and the ini is
 regenerated on save). If the ini is missing it is created from
-`example_pfsense_abuseipdb.ini`. Secrets are never stored in the ini — it
-only holds paths to credential files under `/root/.credentials/`:
-
-- `.pfsense-token`
-- `.abuseipdb-token`
-- `.abuseipdb-mysql-password`
-- `.ipinfo-token`
-- `.abuse-email-password` (abuse email reports)
-- `.xarf-report-token`
+`example_pfsense_abuseipdb.ini`.
 
 Key groups: log paths and WAN interface, reporting thresholds
 (`report_limit`, `abuseipdb_confidense_score_limit`, `report_cooldown`),
-secrets, MySQL connection and toggles (`use_mysql`, `show_ip_info`,
-`show_ip_abusedb_email`), notifications (`notifications`), abuse email
-settings (`send_abuse_email_report`, SMTP host/port/from), X-ARF settings
-(`send_xarf_report`, org/contact/domain), and `suricata_whitelists`
-(comma-separated pf table names). See
+DDoS protection (`protection`, `detection_source`,
+`protection_threshold`, `protection_window`, `ban_time`,
+`max_table_entries`), notifications (`notifications`), MySQL connection
+(`use_mysql`, host/user/database), abuse email settings, X-ARF settings,
+and `suricata_whitelists` (comma-separated pf table names). See
 [`example_pfsense_abuseipdb.ini`](example_pfsense_abuseipdb.ini) for every
 key with comments.
 
@@ -131,19 +132,22 @@ remain as a fallback read only when the value is empty.
 
 ## Web UI
 
-The package adds **Services → AbuseIPDB** to the pfSense menu with three tabs:
+The package adds **Services → AbuseIPDB** to the pfSense menu with three
+pages:
 
-- **Status** — running state, today's AbuseIPDB reports / X-ARF acceptances /
-  errors, recent block-log events, and a live service-log tail (auto-refresh
-  every 60 seconds)
+- **Status** — sub-views for Overview (service state plus clickable
+  Activity-today counters for reports, X-ARF acceptances, errors and banned
+  IPs), Events (filterable block-log events), Blocked IPs (live DDoS table)
+  and the Service log tail (auto-refresh every 60 seconds)
 - **Reports** — browse recent reports: each collapsible entry shows the full
   report comment (with the alert log excerpt) plus the AbuseIPDB and X-ARF
   API responses
 - **Settings** — every ini key as a form field, grouped into tabs (General,
-  AbuseIPDB, Lookups, MySQL, Email, X-ARF); saving regenerates the ini and
-  restarts the watcher. Secrets are masked inputs stored in the pfSense config.
+  Protection, AbuseIPDB, Lookups, MySQL, Email, X-ARF); saving regenerates
+  the ini, restarts the engines and syncs the firewall alias/rule when
+  protection settings change
 
-Both pages are theme-agnostic and follow the selected webGUI stylesheet —
+All pages are theme-agnostic and follow the selected webGUI stylesheet —
 including custom light/dark themes.
 
 ## Service management
@@ -153,11 +157,11 @@ service pfsense_abuseipdb start    # also: stop, restart, status
 sysrc pfsense_abuseipdb_enable=YES # start at boot
 ```
 
-The service runs the watcher under `daemon(8)`: it restarts the watcher if it
-dies, reopens its log on rotation, and the log is rotated by newsyslog
-(1 MB, 3 generations). `status`/`stop` find the watcher via `pgrep -f`,
-since `daemon(8)` retitles its process and its pidfile goes stale across
-restarts.
+The service runs the reporting watcher and the protection engine (when
+enabled) under `daemon(8)`: it restarts them if they die, reopens logs on
+rotation, and both logs are rotated by newsyslog (1 MB, 3 generations).
+`status`/`stop` find the processes via `pgrep -f`, since `daemon(8)`
+retitles its process and its pidfile goes stale across restarts.
 
 ## Manual install
 
@@ -177,7 +181,7 @@ scp pfsense_abuseipdb root@pfsense:/usr/local/etc/rc.d/pfsense_abuseipdb
 > Even in debug mode the loop is live: it processes the newest alerts
 > immediately and sends real reports.
 
-## Block log and cooldown
+## Block log, cooldown and protection
 
 Every processed alert is appended to `/var/log/abuseipdb_block.log`; the
 per-IP count in that file drives the reporting threshold. The cooldown uses
@@ -186,12 +190,18 @@ compared against `report_cooldown` seconds (default 900 = 15 minutes,
 AbuseIPDB's per-IP reporting limit). IPs inside the cooldown are skipped
 before any API call.
 
+The protection engine keeps its own state in
+`/var/db/pfsense_abuseipdb_blocks.list` (IP + expiry) so bans survive
+service restarts and are re-applied after a pfSense filter reload or reboot.
+Every successful report is also recorded as JSON in
+`/var/log/abuseipdb_reports.log` for the Reports page.
+
 ## Credits
 
 Developed by [Tommy Miland](https://github.com/tmiland) with
 [opencode](https://opencode.ai) — AI pair engineering behind the debugging,
-the ini-based configuration, the rc.d service, the pfSense package pipeline,
-and the web UI pages.
+the ini-based configuration, the rc.d services, the DDoS protection engine,
+the pfSense package pipeline, and the web UI pages.
 
 ## License
 
