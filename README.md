@@ -30,6 +30,9 @@ Installed on pfSense (FreeBSD): `bash`, `jq`, `curl`, `whois`, `mysql`
 client, `uuidgen`, `pfctl`, GNU `base64`. A MySQL/MariaDB server reachable
 from the firewall with a `reports` table.
 
+IPv4 only for now: alerts sourced from IPv6 addresses are counted in the
+block log display but not reported.
+
 ## Credentials
 
 The ini points at credential files read at startup (default
@@ -142,3 +145,8 @@ The per-IP cooldown also uses the block log: the timestamp of the last
 `Reporting IP:` entry for an IP is compared against `report_cooldown`
 seconds (default 900 = 15 minutes, AbuseIPDB's per-IP reporting limit).
 IPs inside the cooldown are skipped before any API call.
+
+The service log (`/var/log/pfsense_abuseipdb_service.log`) is rotated by
+newsyslog (1 MB, 3 generations); the service log tail on the status page
+refreshes every 60 seconds. WHOIS and ipinfo lookups are cached per IP in
+memory for the lifetime of the watcher process.
