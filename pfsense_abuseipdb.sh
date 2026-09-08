@@ -55,12 +55,9 @@ report_limit=$(config_grep report_limit)
 abuseipdb_confidense_score_limit=$(config_grep abuseipdb_confidense_score_limit)
 report_cooldown=$(config_grep report_cooldown)
 notifications=$(config_grep notifications)
-detection_source=$(config_grep detection_source)
-if [ "${detection_source}" == "pf" ]; then
-  detection_label="pf Firewall Detected"
-else
-  detection_label="Suricata Detected"
-fi
+# The reporting watcher always works off Suricata's eve.json; the protection
+# engine (separate daemon) has its own detection_source setting.
+detection_label="Suricata Detected"
 
 # Mysql database
 domain=$(config_grep domain)
