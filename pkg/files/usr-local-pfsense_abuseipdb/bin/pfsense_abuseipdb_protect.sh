@@ -70,6 +70,21 @@ table_count() {
   pfctl -t abuseipdb_block -T show 2>/dev/null | grep -c . || true
 }
 
+prune_expired() {
+  local now_epoch=$1
+  [ -f "${state_file}" ] || return 0
+  : > "${state_file}.new"
+  while read -r ip expiry; do
+    [ -n "${ip}" ] || continue
+    if [ "${expiry}" -gt "${now_epoch}" ]; then
+      echo "${ip} ${expiry}" >> "${state_file}.new"
+    else
+      pfctl -t abuseipdb_block -T delete "${ip}" >/dev/null 2>&1 || true
+    fi
+  done < "${state_file}"
+  mv "${state_file}.new" "${state_file}"
+}
+
 table_add() {
   local ip=$1
   local count
@@ -78,7 +93,7 @@ table_add() {
     log_operation "Block table is full (${count}/${max_table_entries}) - refusing to add ${ip}"
     return 1
   fi
-  pfctl -t abuseipdb_block -T add "${ip}" expire "${ban_time}" >/dev/null 2>&1 || true
+  pfctl -t abuseipdb_block -T add "${ip}" >/dev/null 2>&1 || true
   echo "${ip} $(( $(date +%s) + ban_time ))" >> "${state_file}"
   log_operation "PROTECTED: banned ${ip} for ${ban_time}s (burst >= ${protection_threshold} in ${protection_window}s)"
 }
@@ -117,12 +132,13 @@ count_hit() {
   if [ -n "${blocked_until[${ip}]:-}" ] && [ "${now_epoch}" -lt "${blocked_until[${ip}]}" ]; then
     return 0
   fi
-  local start_epoch
-  start_epoch=${hits[${ip}]:-0}
-  start_epoch=${start_epoch%%|*}
-  local count
+  local start_epoch count
   count=${hits[${ip}]:-0}
-  count=${count#*|}
+  count=${count%%|*}
+  count=${count:-0}
+  start_epoch=${hits[${ip}]:-0}
+  start_epoch=${start_epoch#*|}
+  start_epoch=${start_epoch:-0}
   if [ -z "${count}" ] || [ $((now_epoch - start_epoch)) -ge ${protection_window} ]; then
     hits[${ip}]="1|${now_epoch}"
     return 0
@@ -150,7 +166,7 @@ if [ -f "${state_file}" ]; then
   while read -r ip expiry; do
     [ -n "${ip}" ] || continue
     if [ "${expiry}" -gt "${now_epoch}" ]; then
-      pfctl -t abuseipdb_block -T add "${ip}" expire "$((expiry - now_epoch))" >/dev/null 2>&1 || true
+      pfctl -t abuseipdb_block -T add "${ip}" >/dev/null 2>&1 || true
       echo "${ip} ${expiry}" >> "${state_file}.new"
     fi
   done < "${state_file}"
@@ -168,10 +184,16 @@ if [ "${detection_source}" == "suricata" ]; then
   done
 else
   log_operation "Protection engine started (source: pf, ${protection_threshold} blocks/${protection_window}s, ban ${ban_time}s)"
+  last_prune=$(date +%s)
   tail -n0 -F /var/log/filter.log 2>/dev/null | while read -r line; do
     [[ "${line}" == *filterlog* ]] || continue
+    now_epoch=$(date +%s)
+    if [ $((now_epoch - last_prune)) -ge 60 ]; then
+      last_prune=${now_epoch}
+      prune_expired "${now_epoch}"
+    fi
     data=${line#*filterlog*: }
-    IFS="," read -r _f1 _f2 _f3 _f4 _f5 _f6 action direction ipver _f9 _f10 _f11 _f12 _f13 _f14 _f15 _f16 _f17 _f18 src_ip _rest <<< "${data}"
+    IFS="," read -r _f1 _f2 _f3 _f4 _f5 _f6 action direction ipver _f10 _f11 _f12 _f13 _f14 _f15 _f16 _f17 _f18 src_ip _rest <<< "${data}"
     [ "${action}" == "block" ] || continue
     [ "${direction}" == "in" ] || continue
     [ "${ipver}" == "4" ] || continue

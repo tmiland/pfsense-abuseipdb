@@ -33,7 +33,13 @@ if ($enabled && !$found) {
     config_set_path('aliases/alias', $aliases);
 }
 
-$rules = config_get_path('filter', []);
+/* Rules live under filter/rule (the filter section also carries separator
+   and bypassstaticroutes keys). Normalize: a single rule comes back as a
+   scalar. */
+$rules = config_get_path('filter/rule', []);
+if (!is_array($rules)) {
+    $rules = ($rules !== null && $rules !== '') ? array($rules) : array();
+}
 $kept = array();
 $rule_found = false;
 foreach ($rules as $r) {
@@ -62,7 +68,7 @@ if ($enabled && !$rule_found) {
         'tracker' => (string)mt_rand(1000000000, 9999999999)
     );
 }
-config_set_path('filter', $kept);
+config_set_path('filter/rule', $kept);
 write_config("AbuseIPDB protection " . ($enabled ? "enabled" : "disabled"));
 filter_configure();
 echo "protection " . ($enabled ? "on" : "off") . ": alias + rule synced\n";
