@@ -165,4 +165,8 @@ $events = array_reverse($events);
 	</div>
 </div>
 
+<script>
+	setTimeout(function() { location.reload(); }, 60000);
+</script>
+
 <?php include("foot.inc");

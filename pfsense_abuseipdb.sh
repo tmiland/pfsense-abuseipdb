@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+# shellcheck disable=SC1007
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 config_file="${SCRIPT_DIR}/pfsense_abuseipdb.ini"
 example_config_file="${SCRIPT_DIR}/example_pfsense_abuseipdb.ini"
@@ -18,11 +19,15 @@ config_grep() {
   sed -n "s/^$1=//p" "$config_file"
 }
 
-# Credentials
+# Credentials (PFSENSE_* and GMAIL_APP_PASS are reserved for the optional
+# filterlog section)
+# shellcheck disable=SC2034
 PFSENSE_TOKEN=$(< "$(config_grep pfsense_token_file)")
+# shellcheck disable=SC2034
 PFSENSE_URL=$(config_grep pfsense_url)
 ABUSEIPDB_TOKEN=$(< "$(config_grep abuseipdb_token_file)")
 IPINFO_TOKEN=$(< "$(config_grep ipinfo_token_file)")
+# shellcheck disable=SC2034
 GMAIL_APP_PASS=$(< "$(config_grep gmail_app_password_file)")
 
 # Suricata
@@ -31,6 +36,7 @@ block_log_file=$(config_grep block_log_file)
 wan=$(config_grep wan)
 
 # AbuseIPDB
+# shellcheck disable=SC2034
 abuseipdb_user_id=$(config_grep abuseipdb_user_id)
 report_limit=$(config_grep report_limit)
 abuseipdb_confidense_score_limit=$(config_grep abuseipdb_confidense_score_limit)
@@ -86,10 +92,14 @@ whois_contact_email() {
   whois "${1}" | grep "abuse-mailbox:" | awk -F ':  ' '{print $2}' | tail -n 1
 }
 
+sql_escape() {
+  printf '%s' "${1}" | sed "s/'/''/g"
+}
+
 mysql_query() {
   MYSQL_PWD="$mysql_password" mysql -h $mysql_host -u $mysql_user --database $mysql_database <<EOF
 INSERT INTO reports (datetime, timestamp, IPv4, domain, comment, ports, categories, direction)
-VALUES ('$datetime','$timestamp','$ip','$domain','$comment','$ports','$abipdb_category','$direction')
+VALUES ('$(sql_escape "$datetime")','$(sql_escape "$timestamp")','$(sql_escape "$ip")','$(sql_escape "$domain")','$(sql_escape "$comment")','$(sql_escape "$ports")','$(sql_escape "$abipdb_category")','$(sql_escape "$direction")')
 EOF
 }
 
@@ -105,10 +115,14 @@ SELECT datetime FROM reports WHERE IPv4 = '$ip'
 EOF
 }
 
+declare -A whois_cache ipinfo_cache
+
 tail -q -f "${ALERTS_FILE}" | while read -r line; do
   # Parsing Json file via jq;
-  IFS="," read -r timestamp flow_id in_iface event_type src_ip src_port dest_ip dest_port proto pkt_src action signature_id signature category severity direction \
-    <<< "$(jq -r '[.timestamp, .flow_id, .in_iface, .event_type, .src_ip, .src_port, .dest_ip, .dest_port, .proto, .pkt_src, .alert .action, .alert .signature_id, .alert .signature, .alert .category, .alert .severity, .direction] | @csv' <<< "${line}" | sed 's/"//g')"
+  # @tsv keeps values intact even when they contain commas; tabs are mapped
+  # to the unit separator so read preserves empty fields.
+  IFS=$'\037' read -r timestamp flow_id in_iface event_type src_ip src_port dest_ip dest_port proto pkt_src action signature_id signature category severity direction \
+    <<< "$(jq -r '[.timestamp, .flow_id, .in_iface, .event_type, .src_ip, .src_port, .dest_ip, .dest_port, .proto, .pkt_src, .alert .action, .alert .signature_id, .alert .signature, .alert .category, .alert .severity, .direction] | @tsv' <<< "${line}" | tr '\t' '\037')"
   echo "========== Alerts ==========
 
 Timestamp       : $timestamp
@@ -135,22 +149,29 @@ Direction       : $direction
   message=${signature}
 
   if [ "${show_ip_info}" == "yes" ]; then
-    ip_info=$(curl -s https://api.ipinfo.io/lite/"$ip" \
-      -H "Authorization: Bearer $IPINFO_TOKEN")
-    echo "========== IP Info ==========
+    if [[ -z "${ipinfo_cache[${src_ip}]:-}" ]]; then
+      ip_info=$(curl -s https://api.ipinfo.io/lite/"${src_ip}" \
+        -H "Authorization: Bearer ${IPINFO_TOKEN}") || true
+      ipinfo_cache[${src_ip}]=$(printf '%s' "${ip_info}" | jq -r '"Asn\t\(.asn)\nAs name:\t\(.as_name)\nAs domain\t\(.as_domain)\nCountry code\t\(.country_code)\nCountry\t\(.country)\nContinent code\t\(.continent_code)\nContinent\t\(.continent)"' | expand -t 16 2>/dev/null) || true
+      [[ -z "${ipinfo_cache[${src_ip}]}" ]] && ipinfo_cache[${src_ip}]="none"
+    fi
+    echo "========== IP Info =========="
+    echo ""
+    if [ "${ipinfo_cache[${src_ip}]}" == "none" ]; then
+      echo "No ipinfo data available."
+    else
+      echo "${ipinfo_cache[${src_ip}]}"
+    fi
+    echo "    "
 
-Asn             : $(echo "$ip_info" | jq -r '.asn')
-As name:        : $(echo "$ip_info" | jq -r '.as_name')
-As domain       : $(echo "$ip_info" | jq -r '.as_domain')
-Country code    : $(echo "$ip_info" | jq -r '.country_code')
-Country         : $(echo "$ip_info" | jq -r '.country')
-Continent code  : $(echo "$ip_info" | jq -r '.continent_code')
-Continent       : $(echo "$ip_info" | jq -r '.continent')
-    "
-
-    if [ "$show_ip_abusedb_email" == "yes" ]; then
-      whois_contact_email=$(whois_contact_email "${src_ip}") || true
-      if ! [ "$whois_contact_email" = "" ]; then
+    if [ "${show_ip_abusedb_email}" == "yes" ]; then
+      if [[ -z "${whois_cache[${src_ip}]:-}" ]]; then
+        whois_cache[${src_ip}]=$(whois_contact_email "${src_ip}") || true
+        [[ -z "${whois_cache[${src_ip}]}" ]] && whois_cache[${src_ip}]="none"
+      fi
+      whois_contact_email=${whois_cache[${src_ip}]}
+      [ "${whois_contact_email}" == "none" ] && whois_contact_email=""
+      if ! [ "${whois_contact_email}" = "" ]; then
         echo "========== IP Abuse Contact Email ==========
 
 Abuse email     : ${whois_contact_email}
@@ -181,9 +202,14 @@ Abuse email     : ${whois_contact_email}
     continue
   else
     # Abort if source IP is WAN IP
-    if [ "$wan_ip" = "$src_ip" ]
+    if [ "${wan_ip}" = "${src_ip}" ]
     then
       echo "Source IP is WAN IP! Exiting..."
+      continue
+    fi
+    # IPv6 sources are not supported yet
+    if [[ "${src_ip}" == *:* ]]; then
+      echo "IPv6 source address ${src_ip} - reporting not supported yet. Skipping..."
       continue
     fi
     # Get category from signature
@@ -471,7 +497,6 @@ Abuse email     : ${whois_contact_email}
       if [ "${mysql_report_count:-0}" -gt 0 ]
       then
         echo "IP has been logged ${mysql_report_count} times in the MySQL database ${mysql_database}"
-        ip_mysql_logged="yes"
       else
         echo "IP has not been logged in the MySQL database ${mysql_database}"
       fi
@@ -512,8 +537,9 @@ Abuse email     : ${whois_contact_email}
         #   # Construct the comment string for
         #   comment="Detected $block_log_count attacks from $ip.; Logs: $(echo "$ip_logs" | tr '\n' ' ')"
         # else
-        # Extract relevant logs for the current IP
-        logs=$(grep -F "$ip" "$ALERTS_FILE" || true)
+        # Extract relevant logs for the current IP (last 10 MB is plenty of
+        # fresh evidence and keeps X-ARF payloads sane)
+        logs=$(tail -c 10000000 "${ALERTS_FILE}" 2>/dev/null | grep -F "${ip}" || true)
         # Construct the comment string for other triggers
         comment="Suricata Detected ${block_log_count} attacks from $ip.; ${message}; IP: ${ip}; Ports: ${ports}; Direction: ${direction}; Trigger: ${signature_category}; Category: ${category}; Severity: ${severity}"
 
@@ -602,7 +628,7 @@ Abuse email     : ${whois_contact_email}
           # else
           #   echo "Already Reported..."
           # fi
-          if [[ ${ABUSEIPDB_RESPONSE} =~ "You can only report the same IP address once in 15 minutes." ]]; then
+          if [[ ${ABUSEIPDB_RESPONSE} == *"You can only report the same IP address once in 15 minutes."* ]]; then
             echo "Status: $(echo "${ABUSEIPDB_RESPONSE}" | jq -r '.status')"
             echo "Message: $(echo "${ABUSEIPDB_RESPONSE}" | jq -r '.detail')"
             continue
