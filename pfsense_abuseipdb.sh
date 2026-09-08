@@ -652,6 +652,11 @@ Abuse email     : ${whois_contact_email}
           comment=${comment:0:max_comment}
         fi
         comment="${comment} ${report_credit}"
+        # Never publish our own WAN address (it appears as dst in the log
+        # excerpt); local logs keep the real value.
+        if [ -n "${wan_ip}" ]; then
+          comment=${comment//"${wan_ip}"/"<redacted>"}
+        fi
 
         # Send report
         ABUSEIPDB_RESPONSE=$(curl -s https://api.abuseipdb.com/api/v2/report \
