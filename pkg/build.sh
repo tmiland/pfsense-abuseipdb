@@ -26,17 +26,13 @@ install -m 0755 "$PKGDIR/files/usr-local-pfsense_abuseipdb/sbin/setup.sh" \
 	"$STAGE/$PBASE/sbin/setup.sh"
 install -m 0755 "$PKGDIR/files/usr-local-etc-rc.d-pfsense_abuseipdb" \
 	"$STAGE/usr/local/etc/rc.d/pfsense_abuseipdb"
-install -m 0644 "$PKGDIR/files/usr-local-www-packages-pfsense_abuseipdb/status.php" \
-	"$STAGE/$WBASE/status.php"
-install -m 0644 "$PKGDIR/files/usr-local-www-packages-pfsense_abuseipdb/reports.php" \
-	"$STAGE/$WBASE/reports.php"
-install -m 0644 "$PKGDIR/files/usr-local-www-packages-pfsense_abuseipdb/settings.php" \
-	"$STAGE/$WBASE/settings.php"
-
-for page in "$STAGE/$WBASE/status.php" "$STAGE/$WBASE/settings.php" "$STAGE/$PBASE/bin/pfsense_abuseipdb.sh"; do
-	sh -n "$page" 2>/dev/null || true
+# Stage every www page automatically so new pages cannot be forgotten
+for page in "$PKGDIR"/files/usr-local-www-packages-pfsense_abuseipdb/*.php; do
+	install -m 0644 "$page" "$STAGE/$WBASE/$(basename "$page")"
 done
+
 php -l "$STAGE/$WBASE/status.php" >/dev/null
+php -l "$STAGE/$WBASE/reports.php" >/dev/null
 php -l "$STAGE/$WBASE/settings.php" >/dev/null
 
 VERSION=$(sed -n 's/.*<version>\([^<]*\)<.*/\1/p' "$STAGE/$PBASE/share/pfsense_abuseipdb.xml" | head -1)
