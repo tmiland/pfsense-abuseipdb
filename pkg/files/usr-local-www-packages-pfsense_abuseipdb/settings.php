@@ -19,6 +19,7 @@ $rcd = '/usr/local/etc/rc.d/pfsense_abuseipdb';
 /* Settings grouped into tabs: key => array(label, type, help, tab) */
 $tabs = array(
     'general' => 'General',
+    'protection' => 'Protection',
     'abuseipdb' => 'AbuseIPDB',
     'lookups' => 'Lookups',
     'mysql' => 'MySQL',
@@ -34,6 +35,13 @@ $fields = array(
     'domain' => array('Domain', 'text', 'Local domain used in reports.', 'general'),
     'notifications' => array('pfSense notifications', 'select', 'Notify the admin via System > Advanced > Notifications channels on report errors (max 1 per hour).', 'general'),
     'suricata_whitelists' => array('Whitelist pf tables', 'text', 'Comma-separated pf table names used to whitelist source IPs.', 'general'),
+    /* Protection */
+    'protection' => array('DDoS protection', 'select', 'Burst-detect attackers and block them via a pf table + floating block rule. Off by default.', 'protection'),
+    'detection_source' => array('Detection source', 'source', 'pf = firewall block events (works without Suricata). suricata = alert stream (requires Suricata).', 'protection'),
+    'protection_threshold' => array('Burst threshold', 'number', 'Blocked packets (or alerts) per source IP within the window before a ban.', 'protection'),
+    'protection_window' => array('Burst window (seconds)', 'number', 'Length of the sliding detection window.', 'protection'),
+    'ban_time' => array('Ban time (seconds)', 'number', 'How long an offender stays in the block table (pf expiry).', 'protection'),
+    'max_table_entries' => array('Max table entries', 'number', 'Hard cap on the block table so a flood cannot exhaust memory.', 'protection'),
     'pfsense_token' => array('pfSense API token', 'secret', 'Used by the (optional) filterlog section.', 'general'),
     'pfsense_url' => array('pfSense API URL', 'text', '', 'general'),
     'gmail_app_password' => array('Gmail app password', 'secret', 'Reserved for future use.', 'general'),
@@ -120,6 +128,12 @@ function pfsense_abuseipdb_gen_ini($v) {
         "abuseipdb_confidense_score_limit={$v['abuseipdb_confidense_score_limit']}\n" .
         "report_cooldown={$v['report_cooldown']}\n" .
         "notifications={$v['notifications']}\n" .
+        "protection={$v['protection']}\n" .
+        "detection_source={$v['detection_source']}\n" .
+        "protection_threshold={$v['protection_threshold']}\n" .
+        "protection_window={$v['protection_window']}\n" .
+        "ban_time={$v['ban_time']}\n" .
+        "max_table_entries={$v['max_table_entries']}\n" .
         "domain={$v['domain']}\n" .
         "mysql_host={$v['mysql_host']}\n" .
         "mysql_user={$v['mysql_user']}\n" .
@@ -168,6 +182,18 @@ foreach ($fields as $key => $f) {
 if ($vals['report_cooldown'] === '') {
     $vals['report_cooldown'] = '900';
 }
+foreach (array(
+    'protection' => 'no',
+    'detection_source' => 'pf',
+    'protection_threshold' => '50',
+    'protection_window' => '60',
+    'ban_time' => '86400',
+    'max_table_entries' => '2000'
+) as $dkey => $dval) {
+    if ($vals[$dkey] === '') {
+        $vals[$dkey] = $dval;
+    }
+}
 
 $input_errors = array();
 $saved = false;
@@ -214,6 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         file_put_contents($ini_file, pfsense_abuseipdb_gen_ini($new));
         chmod($ini_file, 0600);
         mwexec_bg("/usr/local/etc/rc.d/pfsense_abuseipdb restart");
+        mwexec_bg("/usr/local/bin/php /usr/local/pfsense_abuseipdb/share/sync_protection.php " . (($new['protection'] === 'yes') ? 'on' : 'off'));
         $saved = true;
         $vals = $new;
     }
@@ -274,6 +301,11 @@ if (!empty($input_errors)) {
 										<select class="form-control" name="<?= htmlspecialchars($key) ?>">
 											<option value="yes" <?= ($vals[$key] == 'yes') ? 'selected' : '' ?>><?= gettext('yes') ?></option>
 											<option value="no" <?= ($vals[$key] != 'yes') ? 'selected' : '' ?>><?= gettext('no') ?></option>
+										</select>
+<?php elseif ($f[1] == 'source'): ?>
+										<select class="form-control" name="<?= htmlspecialchars($key) ?>">
+											<option value="pf" <?= ($vals[$key] != 'suricata') ? 'selected' : '' ?>><?= gettext('pf firewall block events (native)') ?></option>
+											<option value="suricata" <?= ($vals[$key] == 'suricata') ? 'selected' : '' ?>><?= gettext('Suricata alert stream') ?></option>
 										</select>
 <?php elseif ($f[1] == 'secret'): ?>
 										<input class="form-control" type="password" name="<?= htmlspecialchars($key) ?>" value="" autocomplete="new-password" placeholder="<?= ($vals[$key] !== '') ? gettext('(stored - leave blank to keep)') : gettext('(blank - migrated from legacy file on save)') ?>" />

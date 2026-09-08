@@ -19,9 +19,13 @@ mkdir -p "$STAGE/$PBASE/bin" "$STAGE/$PBASE/etc" "$STAGE/$PBASE/sbin" \
 	"$STAGE/$PBASE/share" "$STAGE/$WBASE" "$STAGE/usr/local/etc/rc.d"
 
 install -m 0755 "$REPO/pfsense_abuseipdb.sh" "$STAGE/$PBASE/bin/pfsense_abuseipdb.sh"
+install -m 0755 "$PKGDIR/files/usr-local-pfsense_abuseipdb/bin/pfsense_abuseipdb_protect.sh" \
+	"$STAGE/$PBASE/bin/pfsense_abuseipdb_protect.sh"
 install -m 0644 "$REPO/example_pfsense_abuseipdb.ini" "$STAGE/$PBASE/etc/example_pfsense_abuseipdb.ini"
 install -m 0644 "$PKGDIR/files/usr-local-pfsense_abuseipdb/share/pfsense_abuseipdb.xml" \
 	"$STAGE/$PBASE/share/pfsense_abuseipdb.xml"
+install -m 0644 "$PKGDIR/files/usr-local-pfsense_abuseipdb/share/sync_protection.php" \
+	"$STAGE/$PBASE/share/sync_protection.php"
 install -m 0755 "$PKGDIR/files/usr-local-pfsense_abuseipdb/sbin/setup.sh" \
 	"$STAGE/$PBASE/sbin/setup.sh"
 install -m 0755 "$PKGDIR/files/usr-local-etc-rc.d-pfsense_abuseipdb" \

@@ -14,7 +14,10 @@ rcvar="${name}_enable"
 desc="Suricata eve.json watcher - AbuseIPDB/X-ARF/MySQL reporting"
 
 command="/usr/local/pfsense_abuseipdb/bin/pfsense_abuseipdb.sh"
+protect_command="/usr/local/pfsense_abuseipdb/bin/pfsense_abuseipdb_protect.sh"
+ini_file="/usr/local/pfsense_abuseipdb/etc/pfsense_abuseipdb.ini"
 pidfile="/var/run/${name}.pid"
+protect_pidfile="/var/run/${name}-protect.pid"
 logfile="/var/log/${name}_service.log"
 newsyslog_conf="/var/etc/newsyslog.conf.d/pfsense-abuseipdb.conf"
 
@@ -28,9 +31,10 @@ stop_cmd="${name}_stop"
 status_cmd="${name}_status"
 
 # daemon(8) retitles itself and the pidfile can go stale across -r restarts,
-# so process liveness is checked with pgrep -f instead.
+# so process liveness is checked with pgrep -f instead. The pattern covers
+# both the watcher and the protection engine.
 pfsense_abuseipdb_running() {
-  pgrep -f "${command}" >/dev/null 2>&1
+  pgrep -f "/usr/local/pfsense_abuseipdb/bin/" >/dev/null 2>&1
 }
 
 pfsense_abuseipdb_start() {
@@ -38,7 +42,7 @@ pfsense_abuseipdb_start() {
     echo "${name} already running (pid(s): $(pgrep -f "${command}" | tr '\n' ' '))."
     return 0
   fi
-  rm -f "$pidfile"
+  rm -f "$pidfile" "$protect_pidfile"
   # Rotate the service logs via newsyslog (daemon reopens the output file
   # on SIGHUP with -H). /var/etc is regenerated on boot, so the entry is
   # (re)created on every start.
@@ -49,6 +53,9 @@ pfsense_abuseipdb_start() {
     "/var/log/${name}_reports.log" "/var/run/${name}.pid" >> "$newsyslog_conf"
   # -f detach, -H reopen the log on SIGHUP, -r restart the watcher if it dies
   /usr/sbin/daemon -f -H -r -o "$logfile" -p "$pidfile" "$command"
+  if grep -q "^protection=yes" "$ini_file" 2>/dev/null; then
+    /usr/sbin/daemon -f -H -r -o "$logfile" -p "$protect_pidfile" "$protect_command"
+  fi
   sleep 1
   if ! pfsense_abuseipdb_running; then
     echo "Failed to start ${name}; see ${logfile}."
@@ -60,17 +67,17 @@ pfsense_abuseipdb_start() {
 pfsense_abuseipdb_stop() {
   if pfsense_abuseipdb_running; then
     echo "Stopping ${name}..."
-    pkill -TERM -f "${command}" 2>/dev/null
+    pkill -TERM -f "/usr/local/pfsense_abuseipdb/bin/" 2>/dev/null
     for _ in 1 2 3 4 5; do
       pfsense_abuseipdb_running || break
       sleep 1
     done
-    pfsense_abuseipdb_running && pkill -KILL -f "${command}" 2>/dev/null
+    pfsense_abuseipdb_running && pkill -KILL -f "/usr/local/pfsense_abuseipdb/bin/" 2>/dev/null
     echo "Stopped ${name}."
   else
     echo "${name} is not running."
   fi
-  rm -f "$pidfile"
+  rm -f "$pidfile" "$protect_pidfile"
   return 0
 }
 

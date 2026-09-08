@@ -42,6 +42,21 @@ $service_log = '/var/log/pfsense_abuseipdb_service.log';
 
 $running = is_service_running('pfsense_abuseipdb');
 
+/* DDoS protection: blocked IPs (only when the toggle is on) */
+$protection = '';
+$pkg_ini = '/usr/local/pfsense_abuseipdb/etc/pfsense_abuseipdb.ini';
+if (file_exists($pkg_ini)) {
+    foreach (file($pkg_ini, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $l) {
+        if (preg_match('/^protection=(.*)$/', $l, $m)) {
+            $protection = trim($m[1]);
+        }
+    }
+}
+$blocked = array();
+if ($protection === 'yes') {
+    exec("/sbin/pfctl -t abuseipdb_block -T show 2>/dev/null", $blocked);
+}
+
 /* Event categories matched against the block log message text. */
 $event_patterns = array(
     'Reporting IP:' => 'info',
@@ -156,6 +171,17 @@ $events = array_reverse($events);
 				</tbody>
 			</table>
 		</div>
+	</div>
+</div>
+
+<div class="panel panel-default">
+	<div class="panel-heading"><h2 class="panel-title"><?= gettext('DDoS protection - blocked IPs') ?> (<?= count($blocked) ?>)</h2></div>
+	<div class="panel-body">
+<?php if (empty($blocked)): ?>
+		<p class="text-muted"><?= gettext('Block table is empty.') ?></p>
+<?php else: ?>
+		<pre class="abuseipdb-log"><?= htmlspecialchars(implode("\n", $blocked)) ?></pre>
+<?php endif ?>
 	</div>
 </div>
 
