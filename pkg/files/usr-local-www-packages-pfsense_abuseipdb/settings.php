@@ -236,6 +236,7 @@ include("head.inc");
 
 $tab_array = array();
 $tab_array[] = array(gettext("Status"), false, "/packages/pfsense_abuseipdb/status.php");
+$tab_array[] = array(gettext("Reports"), false, "/packages/pfsense_abuseipdb/reports.php");
 $tab_array[] = array(gettext("Settings"), true, "/packages/pfsense_abuseipdb/settings.php");
 display_top_tabs($tab_array);
 

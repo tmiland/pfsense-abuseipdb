@@ -39,14 +39,14 @@ pfsense_abuseipdb_start() {
     return 0
   fi
   rm -f "$pidfile"
-  # Rotate the service log via newsyslog (daemon reopens the output file
+  # Rotate the service logs via newsyslog (daemon reopens the output file
   # on SIGHUP with -H). /var/etc is regenerated on boot, so the entry is
   # (re)created on every start.
   mkdir -p /var/etc/newsyslog.conf.d
-  if [ ! -f "$newsyslog_conf" ]; then
-    printf '%s\t644\t3\t1024\t*\tJC\t%s\n' \
-      "$logfile" "/var/run/${name}.pid" > "$newsyslog_conf"
-  fi
+  printf '%s\t644\t3\t1024\t*\tJC\t%s\n' \
+    "$logfile" "/var/run/${name}.pid" > "$newsyslog_conf"
+  printf '%s\t644\t3\t1024\t*\tJC\t%s\n' \
+    "/var/log/${name}_reports.log" "/var/run/${name}.pid" >> "$newsyslog_conf"
   # -f detach, -H reopen the log on SIGHUP, -r restart the watcher if it dies
   /usr/sbin/daemon -f -H -r -o "$logfile" -p "$pidfile" "$command"
   sleep 1

@@ -92,6 +92,8 @@ fi
 
 IFS="," read -ra suricata_whitelists <<< "$(config_grep suricata_whitelists)"
 
+reports_log="/var/log/abuseipdb_reports.log"
+
 # abusedb_contact_email() {
 #   curl -s 'GET' \
   #   "https://abusedb.cloud/api/v1/${1}" \
@@ -817,6 +819,11 @@ ${report_email}" | tee "${email_tmp}" >/dev/null 2>&1
               log_operation "JSON is invalid"
               pf_notify "pfsense-abuseipdb: X-ARF report JSON invalid for ${ip}"
             fi
+            # Record the full report for the web UI (Reports tab)
+            jq -n --arg time "${datetime}" --arg ip "${ip}" \
+              --arg categories "${abipdb_category}" --arg comment "${comment}" \
+              --arg abuse "${ABUSEIPDB_RESPONSE}" --arg xarf "${xarf_response:-}" \
+              '{time: $time, ip: $ip, categories: $categories, comment: $comment, abuseipdb: (try ($abuse | fromjson) catch null), xarf: (try ($xarf | fromjson) catch null)}' >> "${reports_log}" 2>/dev/null || true
           fi
         fi
       else
