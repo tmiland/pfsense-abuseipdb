@@ -18,6 +18,10 @@
 
 ---
 
+<p align="center">
+  <img src="docs/screenshots/status-overview.png" alt="Status overview" width="920">
+</p>
+
 ## Features
 
 - **DDoS protection engine** — burst-detects attackers from native pf firewall events (no Suricata required) or the Suricata alert stream, and bans them via a pf table with automatic expiry, whitelist awareness and a hard entry cap
@@ -149,6 +153,26 @@ pages:
 
 All pages are theme-agnostic and follow the selected webGUI stylesheet —
 including custom light/dark themes.
+
+<p align="center">
+  <img src="docs/screenshots/reports.png" alt="Reports" width="49%">
+  <img src="docs/screenshots/settings-protection.png" alt="Settings - Protection" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/status-events.png" alt="Status - Events" width="49%">
+  <img src="docs/screenshots/settings-general.png" alt="Settings - General" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/status-blocked.png" alt="Blocked IPs" width="32%">
+  <img src="docs/screenshots/settings-mysql.png" alt="Settings - MySQL" width="32%">
+  <img src="docs/screenshots/settings-email.png" alt="Settings - Email" width="32%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/settings-xarf.png" alt="Settings - X-ARF" width="49%">
+</p>
+
+More views (service log, MySQL/Email/X-ARF details) live in
+[`docs/screenshots/`](docs/screenshots).
 
 ## Service management
 
