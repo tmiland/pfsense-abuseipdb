@@ -2,33 +2,16 @@
 /*
  * status.php
  *
- * Status page for the AbuseIPDB Suricata Watcher package.
+ * Status page for the AbuseIPDB Suricata Watcher package. Split into
+ * sub-views (Overview / Events / Blocked IPs / Service log) selectable via
+ * the "view" URL parameter; the Activity-today counters link into the
+ * filtered Events view.
  */
 require_once("guiconfig.inc");
 require_once("service-utils.inc");
 
 $pgtitle = array(gettext("Services"), gettext("AbuseIPDB"), gettext("Status"));
 include("head.inc");
-
-/* Theme-agnostic styling: inherit colors so both light and dark themes work. */
-?>
-<style>
-	pre.abuseipdb-log {
-		background: transparent;
-		color: inherit;
-		border: 1px solid currentColor;
-		border-radius: 4px;
-		overflow-wrap: anywhere;
-		white-space: pre-wrap;
-	}
-	td.abuseipdb-error {
-		font-weight: 700;
-	}
-	td.abuseipdb-muted {
-		opacity: 0.65;
-	}
-</style>
-<?php
 
 $tab_array = array();
 $tab_array[] = array(gettext("Status"), true, "/packages/pfsense_abuseipdb/status.php");
@@ -57,15 +40,27 @@ if ($protection === 'yes') {
     exec("/sbin/pfctl -t abuseipdb_block -T show 2>/dev/null", $blocked);
 }
 
+/* Sub-view selection */
+$views = array('overview', 'events', 'blocked', 'log');
+$view = $_GET['view'] ?? 'overview';
+if (!in_array($view, $views, true)) {
+    $view = 'overview';
+}
+$filter = $_GET['filter'] ?? '';
+$filter_labels = array('reports' => gettext('AbuseIPDB reports'), 'errors' => gettext('errors'), 'xarf' => gettext('X-ARF results'));
+if (!isset($filter_labels[$filter])) {
+    $filter = '';
+}
+
 /* Event categories matched against the block log message text. */
 $event_patterns = array(
-    'Reporting IP:' => 'info',
-    'AbuseIPDB Confidence Score:' => 'info',
-    'Response:' => 'muted',
-    'X-ARF Response:' => 'info',
-    'ERROR' => 'error',
-    'Trigger:' => 'muted',
-    'JSON is' => 'muted'
+    'Reporting IP:' => array('info', 'reports'),
+    'AbuseIPDB Confidence Score:' => array('info', ''),
+    'Response:' => array('muted', ''),
+    'X-ARF Response:' => array('info', 'xarf'),
+    'ERROR' => array('error', 'errors'),
+    'Trigger:' => array('muted', ''),
+    'JSON is' => array('muted', '')
 );
 
 $events = array();
@@ -79,31 +74,72 @@ if (file_exists($block_log)) {
             continue;
         }
         $type = 'other';
-        foreach ($event_patterns as $needle => $cls) {
+        $bucket = '';
+        foreach ($event_patterns as $needle => $meta) {
             if (strpos($m[2], $needle) !== false) {
-                $type = $cls;
+                $type = $meta[0];
+                $bucket = $meta[1];
                 break;
             }
         }
         if (substr($m[1], 0, 10) == $today) {
-            if ($type == 'info' && strpos($m[2], 'Reporting IP:') !== false) {
+            if ($bucket == 'reports') {
                 $stats['reported']++;
             }
-            if (strpos($m[2], 'X-ARF Response') !== false && strpos($m[2], '"success"') !== false) {
+            if ($bucket == 'xarf' && strpos($m[2], '"success"') !== false) {
                 $stats['xarf_ok']++;
             }
             if ($type == 'error') {
                 $stats['errors']++;
             }
         }
-        $events[] = array('ts' => $m[1], 'class' => $type, 'msg' => $m[2]);
+        $events[] = array('ts' => $m[1], 'class' => $type, 'bucket' => $bucket, 'msg' => $m[2]);
         if (count($events) >= 100) {
             break;
         }
     }
 }
 $events = array_reverse($events);
+
+/* Theme-agnostic styling: inherit colors so both light and dark themes work. */
 ?>
+<style>
+	pre.abuseipdb-log {
+		background: transparent;
+		color: inherit;
+		border: 1px solid currentColor;
+		border-radius: 4px;
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
+	}
+	td.abuseipdb-error {
+		font-weight: 700;
+	}
+	td.abuseipdb-muted {
+		opacity: 0.65;
+	}
+	a.abuseipdb-card, a.abuseipdb-card:hover {
+		text-decoration: none;
+		color: inherit;
+	}
+</style>
+<?php
+
+/* Sub-view navigation (page reloads keep the auto-refresh parameters). */
+$subtabs = array(
+    'overview' => gettext('Overview'),
+    'events' => gettext('Events'),
+    'blocked' => gettext('Blocked IPs'),
+    'log' => gettext('Service log')
+);
+?>
+<ul class="nav nav-tabs">
+<?php foreach ($subtabs as $vid => $vname): ?>
+	<li<?= ($view === $vid) ? ' class="active"' : '' ?>><a href="status.php?view=<?= htmlspecialchars($vid) ?>"><?= htmlspecialchars($vname) ?></a></li>
+<?php endforeach ?>
+</ul>
+
+<?php if ($view == 'overview'): ?>
 
 <?php if (!$running): ?>
 	<div class="alert alert-warning">
@@ -116,81 +152,112 @@ $events = array_reverse($events);
 	</div>
 <?php endif; ?>
 
-<div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?= gettext('Activity today') ?></h2></div>
-	<div class="panel-body">
-		<div class="row">
-			<div class="col-md-4">
-				<div class="panel panel-default">
-					<div class="panel-body text-center">
-						<h3><?= htmlspecialchars($stats['reported']) ?></h3>
-						<span><?= gettext('AbuseIPDB reports filed') ?></span>
-					</div>
+	<div class="panel panel-default">
+		<div class="panel-heading"><h2 class="panel-title"><?= gettext('Activity today') ?></h2></div>
+		<div class="panel-body">
+			<div class="row">
+				<div class="col-md-4">
+					<a class="abuseipdb-card" href="status.php?view=events&filter=reports">
+						<div class="panel panel-default">
+							<div class="panel-body text-center">
+								<h3><?= htmlspecialchars($stats['reported']) ?></h3>
+								<span><?= gettext('AbuseIPDB reports filed') ?></span>
+							</div>
+						</div>
+					</a>
 				</div>
-			</div>
-			<div class="col-md-4">
-				<div class="panel panel-default">
-					<div class="panel-body text-center">
-						<h3><?= htmlspecialchars($stats['xarf_ok']) ?></h3>
-						<span><?= gettext('X-ARF reports accepted') ?></span>
-					</div>
+				<div class="col-md-4">
+					<a class="abuseipdb-card" href="status.php?view=events&filter=xarf">
+						<div class="panel panel-default">
+							<div class="panel-body text-center">
+								<h3><?= htmlspecialchars($stats['xarf_ok']) ?></h3>
+								<span><?= gettext('X-ARF reports accepted') ?></span>
+							</div>
+						</div>
+					</a>
 				</div>
-			</div>
-			<div class="col-md-4">
-				<div class="panel panel-default">
-					<div class="panel-body text-center">
-						<h3><?= htmlspecialchars($stats['errors']) ?></h3>
-						<span><?= gettext('Errors today') ?></span>
-					</div>
+				<div class="col-md-4">
+					<a class="abuseipdb-card" href="status.php?view=events&filter=errors">
+						<div class="panel panel-default">
+							<div class="panel-body text-center">
+								<h3><?= htmlspecialchars($stats['errors']) ?></h3>
+								<span><?= gettext('Errors today') ?></span>
+							</div>
+						</div>
+					</a>
 				</div>
 			</div>
 		</div>
 	</div>
-</div>
 
-<div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?= gettext('Recent events (block log)') ?></h2></div>
-	<div class="panel-body">
-		<div class="table-responsive">
-			<table class="table table-striped table-hover table-condensed">
-				<thead>
-					<tr>
-						<th><?= gettext('Time') ?></th>
-						<th><?= gettext('Event') ?></th>
-					</tr>
-				</thead>
-				<tbody>
-<?php foreach ($events as $e): ?>
-					<tr>
-						<td style="white-space: nowrap;"><?= htmlspecialchars($e['ts']) ?></td>
-						<td class="<?= ($e['class'] == 'error') ? 'abuseipdb-error' : (($e['class'] == 'muted') ? 'abuseipdb-muted' : '') ?>">
-							<?= htmlspecialchars($e['msg']) ?>
-						</td>
-					</tr>
-<?php endforeach ?>
-				</tbody>
-			</table>
-		</div>
-	</div>
-</div>
+<?php elseif ($view == 'events'): ?>
 
-<div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?= gettext('DDoS protection - blocked IPs') ?> (<?= count($blocked) ?>)</h2></div>
-	<div class="panel-body">
-<?php if (empty($blocked)): ?>
-		<p class="text-muted"><?= gettext('Block table is empty.') ?></p>
+	<div class="panel panel-default">
+		<div class="panel-heading">
+			<h2 class="panel-title">
+<?php if ($filter !== ''): ?>
+				<?= sprintf(gettext('Events: %1$s (last 100)'), $filter_labels[$filter]) ?>
+				&mdash; <a href="status.php?view=events"><?= gettext('show all') ?></a>
 <?php else: ?>
-		<pre class="abuseipdb-log"><?= htmlspecialchars(implode("\n", $blocked)) ?></pre>
+				<?= gettext('Recent events (block log)') ?>
 <?php endif ?>
+			</h2>
+		</div>
+		<div class="panel-body">
+			<div class="table-responsive">
+				<table class="table table-striped table-hover table-condensed">
+					<thead>
+						<tr>
+							<th><?= gettext('Time') ?></th>
+							<th><?= gettext('Event') ?></th>
+						</tr>
+					</thead>
+					<tbody>
+<?php $shown = 0; foreach ($events as $e): if ($filter !== '' && $e['bucket'] !== $filter) { continue; } $shown++; ?>
+						<tr>
+							<td style="white-space: nowrap;"><?= htmlspecialchars($e['ts']) ?></td>
+							<td class="<?= ($e['class'] == 'error') ? 'abuseipdb-error' : (($e['class'] == 'muted') ? 'abuseipdb-muted' : '') ?>">
+								<?= htmlspecialchars($e['msg']) ?>
+							</td>
+						</tr>
+<?php endforeach; if ($shown === 0): ?>
+						<tr><td colspan="2" class="text-muted"><?= gettext('No matching events in the recent log window.') ?></td></tr>
+<?php endif ?>
+					</tbody>
+				</table>
+			</div>
+		</div>
 	</div>
-</div>
 
-<div class="panel panel-default">
-	<div class="panel-heading"><h2 class="panel-title"><?= gettext('Service log tail') ?></h2></div>
-	<div class="panel-body">
-		<pre class="abuseipdb-log"><?= htmlspecialchars(implode("\n", array_slice(explode("\n", shell_exec("tail -n 40 " . escapeshellarg($service_log) . " 2>/dev/null")), -40))) ?></pre>
+<?php elseif ($view == 'blocked'): ?>
+
+<?php if ($protection !== 'yes'): ?>
+	<div class="alert alert-info">
+		<?= gettext('DDoS protection is disabled. Enable it under Settings > Protection.') ?>
 	</div>
-</div>
+<?php else: ?>
+	<div class="panel panel-default">
+		<div class="panel-heading"><h2 class="panel-title"><?= gettext('DDoS protection - blocked IPs') ?> (<?= count($blocked) ?>)</h2></div>
+		<div class="panel-body">
+<?php if (empty($blocked)): ?>
+			<p class="text-muted"><?= gettext('Block table is empty.') ?></p>
+<?php else: ?>
+			<pre class="abuseipdb-log"><?= htmlspecialchars(implode("\n", $blocked)) ?></pre>
+<?php endif ?>
+		</div>
+	</div>
+<?php endif ?>
+
+<?php elseif ($view == 'log'): ?>
+
+	<div class="panel panel-default">
+		<div class="panel-heading"><h2 class="panel-title"><?= gettext('Service log tail') ?></h2></div>
+		<div class="panel-body">
+			<pre class="abuseipdb-log"><?= htmlspecialchars(implode("\n", array_slice(explode("\n", shell_exec("tail -n 40 " . escapeshellarg($service_log) . " 2>/dev/null")), -40))) ?></pre>
+		</div>
+	</div>
+
+<?php endif ?>
 
 <script>
 	setTimeout(function() { location.reload(); }, 60000);
