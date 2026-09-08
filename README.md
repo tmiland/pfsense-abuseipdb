@@ -131,13 +131,17 @@ remain as a fallback read only when the value is empty.
 
 ## Web UI
 
-The package adds **Services → AbuseIPDB** to the pfSense menu with two tabs:
+The package adds **Services → AbuseIPDB** to the pfSense menu with three tabs:
 
 - **Status** — running state, today's AbuseIPDB reports / X-ARF acceptances /
   errors, recent block-log events, and a live service-log tail (auto-refresh
   every 60 seconds)
-- **Settings** — every ini key as a form field; saving regenerates the ini and
-  restarts the watcher. Credential fields hold file paths only.
+- **Reports** — browse recent reports: each collapsible entry shows the full
+  report comment (with the alert log excerpt) plus the AbuseIPDB and X-ARF
+  API responses
+- **Settings** — every ini key as a form field, grouped into tabs (General,
+  AbuseIPDB, Lookups, MySQL, Email, X-ARF); saving regenerates the ini and
+  restarts the watcher. Secrets are masked inputs stored in the pfSense config.
 
 Both pages are theme-agnostic and follow the selected webGUI stylesheet —
 including custom light/dark themes.
