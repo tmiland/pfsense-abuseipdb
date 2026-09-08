@@ -305,6 +305,15 @@ if (!empty($input_errors)) {
 					<div class="table-responsive">
 						<table class="table table-striped table-hover">
 							<tbody>
+<?php if ($tid == 'general'): ?>
+								<tr>
+									<td style="width: 30%;"><strong><?= gettext('Project') ?></strong></td>
+									<td>
+										<a href="https://github.com/tmiland/pfsense-abuseipdb" target="_blank" rel="noopener">github.com/tmiland/pfsense-abuseipdb <i class="fa fa-external-link"></i></a>
+										<span class="help-block"><?= gettext('Source, documentation and issue tracker for this package.') ?></span>
+									</td>
+								</tr>
+<?php endif ?>
 <?php foreach ($fields as $key => $f): if ($f[3] !== $tid) { continue; } ?>
 								<tr>
 									<td style="width: 30%;">

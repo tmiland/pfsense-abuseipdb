@@ -313,8 +313,11 @@ Abuse email     : ${whois_contact_email}
       echo "IPv6 source address ${src_ip} - reporting not supported yet. Skipping..."
       continue
     fi
-    # Get category from signature
-    signature_category=$(echo "$signature" | awk -F ' ' '{print $2}')
+    # Get category from signature (pf native events keep the pre-set
+    # signature_category=PF; their signature text has no ET trigger word)
+    if [ "${detection_source}" != "pf" ]; then
+      signature_category=$(echo "$signature" | awk -F ' ' '{print $2}')
+    fi
     # Determine the appropriate AbuseIPDB category based on the trigger and comment
     # determine_category() {
     #   local signature_category=$1
@@ -688,7 +691,12 @@ Abuse email     : ${whois_contact_email}
 
         abuseipdb_confidence_score=$(echo "${ABUSEIPDB_CHECK}" | jq -r '.data.abuseConfidenceScore // 0' || true)
 
-        if [ "${abuseipdb_confidence_score:-0}" -gt "${abuseipdb_confidense_score_limit}" ]; then
+        if [ "${detection_source}" == "pf" ]; then
+          # pf native events are already threshold-gated (native_threshold
+          # blocks within the window); a fresh attacker scores 0 here, so
+          # the confidence limit would block every native report.
+          echo "Sending a new report to AbuseIPDB"
+        elif [ "${abuseipdb_confidence_score:-0}" -gt "${abuseipdb_confidense_score_limit}" ]; then
           echo "AbuseIPDB Confidence Score ${abuseipdb_confidence_score} is greater than limit ${abuseipdb_confidense_score_limit} past 90 days..."
           echo "Sending a new report to AbuseIPDB"
         else
@@ -749,6 +757,14 @@ Abuse email     : ${whois_contact_email}
         if [ -n "${wan_ip}" ]; then
           comment=${comment//"${wan_ip}"/"<redacted>"}
         fi
+        # Never publish internal (RFC1918) addresses either — pf block
+        # events embed the LAN-side destination; loop until no match so
+        # separators consumed by one pass cannot hide the next IP.
+        while :; do
+          comment_new=$(printf '%s' "${comment}" | sed -E 's/(^|[^0-9.])(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|192\.168\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3})([^0-9.]|$)/\1<redacted>\4/g')
+          [ "${comment_new}" == "${comment}" ] && break
+          comment=${comment_new}
+        done
 
         # Send report
         ABUSEIPDB_RESPONSE=$(curl -s https://api.abuseipdb.com/api/v2/report \

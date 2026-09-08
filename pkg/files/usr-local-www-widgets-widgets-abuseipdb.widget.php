@@ -4,7 +4,7 @@
  *
  * Dashboard widget for the AbuseIPDB Watcher package: service state,
  * detection source, reports filed today, banned IP count and the last
- * block-log events, linking into the package Status page.
+ * reports, linking into the package Status page.
  */
 require_once("guiconfig.inc");
 require_once("service-utils.inc");
@@ -31,6 +31,19 @@ $watcher_running = is_service_running('pfsense_abuseipdb');
 $reports_today = 0;
 $banned = 0;
 $protect_running = false;
+
+$last_reports = array();
+exec("/usr/bin/tail -n 5 " . escapeshellarg('/var/log/abuseipdb_reports.log') . " 2>/dev/null", $report_lines);
+foreach (array_reverse($report_lines) as $report_line) {
+	$rec = json_decode($report_line, true);
+	if (!is_array($rec) || empty($rec['ip']) || empty($rec['time'])) {
+		continue;
+	}
+	$last_reports[] = $rec;
+	if (count($last_reports) >= 3) {
+		break;
+	}
+}
 
 if ($watcher_running) {
 	/* Bounded tail: never grep the whole (large) block log from a widget */
@@ -84,6 +97,21 @@ if ($watcher_running) {
 <?php endif ?>
 		</tbody>
 	</table>
+<?php if (!empty($last_reports)): ?>
+	<table class="table table-condensed">
+		<tbody>
+<?php foreach ($last_reports as $rec):
+	$score = (isset($rec['abuseipdb']['data']['abuseConfidenceScore'])) ? $rec['abuseipdb']['data']['abuseConfidenceScore'] : null;
+?>
+			<tr>
+				<td class="text-muted" style="white-space: nowrap;"><?= htmlspecialchars(substr($rec['time'], 11)) ?></td>
+				<td><?= htmlspecialchars($rec['ip']) ?></td>
+				<td class="<?= ($score !== null && $score > 0) ? 'text-success' : 'text-muted' ?>"><?= ($score !== null) ? sprintf(gettext('score %1$d'), $score) : gettext('reported') ?></td>
+			</tr>
+<?php endforeach ?>
+		</tbody>
+	</table>
+<?php endif ?>
 	<div class="text-right" style="padding-bottom: 5px;">
 		<a href="/packages/pfsense_abuseipdb/status.php"><?= gettext('Open AbuseIPDB status') ?> <i class="fa-solid fa-arrow-right"></i></a>
 	</div>
