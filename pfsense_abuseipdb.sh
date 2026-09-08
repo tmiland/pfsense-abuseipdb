@@ -55,9 +55,13 @@ report_limit=$(config_grep report_limit)
 abuseipdb_confidense_score_limit=$(config_grep abuseipdb_confidense_score_limit)
 report_cooldown=$(config_grep report_cooldown)
 notifications=$(config_grep notifications)
-# The reporting watcher always works off Suricata's eve.json; the protection
-# engine (separate daemon) has its own detection_source setting.
-detection_label="Suricata Detected"
+# Label follows the configured detection source (pf = native firewall events)
+detection_source=$(config_grep detection_source)
+if [ "${detection_source}" == "pf" ]; then
+  detection_label="pf Firewall Detected"
+else
+  detection_label="Suricata Detected"
+fi
 
 # Mysql database
 domain=$(config_grep domain)
@@ -671,6 +675,12 @@ Abuse email     : ${whois_contact_email}
             | jq '.status')
           ABUSEIPDB_DETAIL=$(echo "${ABUSEIPDB_RESPONSE}" \
             | jq -r '.errors[]' | jq '.detail')
+          # Benign: protection engine or a recent cycle already reported this
+          # IP. Rate-limit noise is not an error - no ERROR log, no notify.
+          if echo "${ABUSEIPDB_DETAIL}" | grep -q "once in 15 minutes"; then
+            log_operation "AbuseIPDB 15-minute limit reached for ${ip} - already reported, skipping"
+            continue
+          fi
           echo "ERROR! Something went wrong."
           echo "Status: ${ABUSEIPDB_STATUS}"
           echo "Message: ${ABUSEIPDB_DETAIL}"

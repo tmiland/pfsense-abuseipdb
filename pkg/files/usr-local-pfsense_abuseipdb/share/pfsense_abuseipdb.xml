@@ -2,7 +2,7 @@
 <!DOCTYPE packagegui SYSTEM "../schema/packages.dtd">
 <packagegui>
 	<name>pfsense_abuseipdb</name>
-	<version>0.8.2</version>
+	<version>0.8.3</version>
 	<title>AbuseIPDB Suricata Watcher</title>
 	<menu>
 		<name>AbuseIPDB</name>

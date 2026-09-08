@@ -138,6 +138,17 @@ report_banned() {
   if [ $((now_epoch - last)) -lt 900 ]; then
     return 0
   fi
+  # Skip if the reporting watcher already reported this IP recently - it would
+  # just collide with the 15-minute API limit.
+  local watch_ts
+  watch_ts=$(grep "Reporting IP: ${ip} " "${block_log_file}" 2>/dev/null | tail -n 1 | awk '{print $1, $2}') || true
+  if [ -n "${watch_ts}" ]; then
+    local watch_epoch
+    watch_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "${watch_ts}" +%s 2>/dev/null || date -d "${watch_ts}" +%s 2>/dev/null || echo 0)
+    if [ "${watch_epoch:-0}" -gt 0 ] && [ $((now_epoch - watch_epoch)) -lt 900 ]; then
+      return 0
+    fi
+  fi
   reported_at[${ip}]=${now_epoch}
   local label="pf Firewall Detected"
   [ "${detection_source}" == "suricata" ] && label="Suricata Detected"
