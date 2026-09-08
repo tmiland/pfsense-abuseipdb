@@ -52,12 +52,13 @@ if (!isset($filter_labels[$filter])) {
     $filter = '';
 }
 
-/* Event categories matched against the block log message text. */
+/* Event categories matched against the block log message text. Most
+   specific needles first: "X-ARF Response:" contains "Response:". */
 $event_patterns = array(
     'Reporting IP:' => array('info', 'reports'),
     'AbuseIPDB Confidence Score:' => array('info', ''),
-    'Response:' => array('muted', ''),
     'X-ARF Response:' => array('info', 'xarf'),
+    'Response:' => array('muted', ''),
     'ERROR' => array('error', 'errors'),
     'Trigger:' => array('muted', ''),
     'JSON is' => array('muted', '')
@@ -156,7 +157,7 @@ $subtabs = array(
 		<div class="panel-heading"><h2 class="panel-title"><?= gettext('Activity today') ?></h2></div>
 		<div class="panel-body">
 			<div class="row">
-				<div class="col-md-4">
+				<div class="col-md-3">
 					<a class="abuseipdb-card" href="status.php?view=events&filter=reports">
 						<div class="panel panel-default">
 							<div class="panel-body text-center">
@@ -166,7 +167,7 @@ $subtabs = array(
 						</div>
 					</a>
 				</div>
-				<div class="col-md-4">
+				<div class="col-md-3">
 					<a class="abuseipdb-card" href="status.php?view=events&filter=xarf">
 						<div class="panel panel-default">
 							<div class="panel-body text-center">
@@ -176,12 +177,22 @@ $subtabs = array(
 						</div>
 					</a>
 				</div>
-				<div class="col-md-4">
+				<div class="col-md-3">
 					<a class="abuseipdb-card" href="status.php?view=events&filter=errors">
 						<div class="panel panel-default">
 							<div class="panel-body text-center">
 								<h3><?= htmlspecialchars($stats['errors']) ?></h3>
 								<span><?= gettext('Errors today') ?></span>
+							</div>
+						</div>
+					</a>
+				</div>
+				<div class="col-md-3">
+					<a class="abuseipdb-card" href="status.php?view=blocked">
+						<div class="panel panel-default">
+							<div class="panel-body text-center">
+								<h3><?= htmlspecialchars(count($blocked)) ?></h3>
+								<span><?= gettext('IPs banned (DDoS protection)') ?></span>
 							</div>
 						</div>
 					</a>
