@@ -16,7 +16,8 @@ mkdir -p "$STAGE" "$META" "$OUT"
 PBASE="usr/local/pfsense_abuseipdb"
 WBASE="usr/local/www/packages/pfsense_abuseipdb"
 mkdir -p "$STAGE/$PBASE/bin" "$STAGE/$PBASE/etc" "$STAGE/$PBASE/sbin" \
-	"$STAGE/$PBASE/share" "$STAGE/$WBASE" "$STAGE/usr/local/etc/rc.d"
+	"$STAGE/$PBASE/share" "$STAGE/$WBASE" "$STAGE/usr/local/etc/rc.d" \
+	"$STAGE/usr/local/www/widgets/include" "$STAGE/usr/local/www/widgets/widgets"
 
 install -m 0755 "$REPO/pfsense_abuseipdb.sh" "$STAGE/$PBASE/bin/pfsense_abuseipdb.sh"
 install -m 0755 "$PKGDIR/files/usr-local-pfsense_abuseipdb/bin/pfsense_abuseipdb_protect.sh" \
@@ -34,10 +35,17 @@ install -m 0755 "$PKGDIR/files/usr-local-etc-rc.d-pfsense_abuseipdb" \
 for page in "$PKGDIR"/files/usr-local-www-packages-pfsense_abuseipdb/*.php; do
 	install -m 0644 "$page" "$STAGE/$WBASE/$(basename "$page")"
 done
+# Dashboard widget (include registers the title, widget.php renders the body)
+install -m 0644 "$PKGDIR/files/usr-local-www-widgets-include-abuseipdb.inc" \
+	"$STAGE/usr/local/www/widgets/include/abuseipdb.inc"
+install -m 0644 "$PKGDIR/files/usr-local-www-widgets-widgets-abuseipdb.widget.php" \
+	"$STAGE/usr/local/www/widgets/widgets/abuseipdb.widget.php"
 
 php -l "$STAGE/$WBASE/status.php" >/dev/null
 php -l "$STAGE/$WBASE/reports.php" >/dev/null
 php -l "$STAGE/$WBASE/settings.php" >/dev/null
+php -l "$STAGE/usr/local/www/widgets/widgets/abuseipdb.widget.php" >/dev/null
+php -l "$STAGE/usr/local/www/widgets/include/abuseipdb.inc" >/dev/null
 
 VERSION=$(sed -n 's/.*<version>\([^<]*\)<.*/\1/p' "$STAGE/$PBASE/share/pfsense_abuseipdb.xml" | head -1)
 ABI=$(pkg config abi)
