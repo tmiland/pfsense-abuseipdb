@@ -50,7 +50,8 @@ directory at startup. If the file is missing, it is created from
 holds paths to credential files under `/root/.credentials/`.
 
 Keys: `alerts_file`, `block_log_file`, `wan`, `abuseipdb_user_id`,
-`report_limit`, `abuseipdb_confidense_score_limit`, `domain`,
+`report_limit`, `abuseipdb_confidense_score_limit`, `report_cooldown`,
+`domain`,
 `mysql_host`, `mysql_user`, `mysql_password_file`, `mysql_database`,
 `use_mysql`, `show_ip_info`, `show_ip_abusedb_email`,
 `send_abuse_email_report`, `email_report_limit`, `report_name`,
@@ -136,3 +137,8 @@ package migrates an existing ini on install and stops the manual watcher.
 
 Every processed alert is appended to `/var/log/abuseipdb_block.log`; the
 per-IP count in that file is what drives the reporting threshold.
+
+The per-IP cooldown also uses the block log: the timestamp of the last
+`Reporting IP:` entry for an IP is compared against `report_cooldown`
+seconds (default 900 = 15 minutes, AbuseIPDB's per-IP reporting limit).
+IPs inside the cooldown are skipped before any API call.
