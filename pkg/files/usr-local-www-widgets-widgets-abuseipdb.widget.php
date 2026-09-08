@@ -29,7 +29,6 @@ $detection_label = (($ini['detection_source'] ?? '') === 'pf') ?
 $watcher_running = is_service_running('pfsense_abuseipdb');
 
 $reports_today = 0;
-$last_events = array();
 $banned = 0;
 $protect_running = false;
 
@@ -42,7 +41,6 @@ if ($watcher_running) {
 			$reports_today++;
 		}
 	}
-	$last_events = array_slice($lines, -3);
 	if ($protect_on) {
 		exec("/sbin/pfctl -t abuseipdb_block -T show 2>/dev/null", $banned_list);
 		$banned = count($banned_list);
@@ -86,21 +84,6 @@ if ($watcher_running) {
 <?php endif ?>
 		</tbody>
 	</table>
-<?php if (!empty($last_events)): ?>
-	<table class="table table-condensed">
-		<tbody>
-<?php foreach ($last_events as $ev):
-	if (!preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (.*)$/', $ev, $m)) { continue; }
-	$msg = (mb_strlen($m[2]) > 64) ? mb_substr($m[2], 0, 63) . '…' : $m[2];
-?>
-			<tr>
-				<td class="text-muted" style="white-space: nowrap;"><?= htmlspecialchars(substr($m[1], 11)) ?></td>
-				<td class="text-muted"><?= htmlspecialchars($msg) ?></td>
-			</tr>
-<?php endforeach ?>
-		</tbody>
-	</table>
-<?php endif ?>
 	<div class="text-right" style="padding-bottom: 5px;">
 		<a href="/packages/pfsense_abuseipdb/status.php"><?= gettext('Open AbuseIPDB status') ?> <i class="fa-solid fa-arrow-right"></i></a>
 	</div>

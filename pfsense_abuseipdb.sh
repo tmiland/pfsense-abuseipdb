@@ -59,9 +59,23 @@ notifications=$(config_grep notifications)
 detection_source=$(config_grep detection_source)
 if [ "${detection_source}" == "pf" ]; then
   detection_label="pf Firewall Detected"
+  detection_software="pf firewall"
 else
   detection_label="Suricata Detected"
+  detection_software="Suricata"
 fi
+
+# Native (pf) reporting: an IP must accumulate at least native_threshold
+# blocks within native_window seconds before a report is filed. These keys
+# only apply when detection_source=pf.
+native_threshold=$(config_grep native_threshold)
+native_threshold=${native_threshold:-25}
+native_window=$(config_grep native_window)
+native_window=${native_window:-600}
+native_category=$(config_grep native_category)
+native_category=${native_category:-14}
+# pfSense filter.log (raw pf block events); the input for native mode
+FILTER_LOG="/var/log/filter.log"
 
 # Mysql database
 domain=$(config_grep domain)
@@ -139,8 +153,71 @@ EOF
 }
 
 declare -A whois_cache ipinfo_cache
+# Native (pf) mode state: per-IP block counters and report timestamps
+declare -A pf_blocks pf_first pf_reported
 
-tail -q -f "${ALERTS_FILE}" | while read -r line; do
+if [ "${detection_source}" == "pf" ]; then
+  TAIL_TARGET="${FILTER_LOG}"
+  # -F (not -f): filter.log rotates frequently; follow the file by NAME
+  TAIL_ARGS="-q -n0 -F"
+else
+  TAIL_TARGET="${ALERTS_FILE}"
+  TAIL_ARGS="-q -f"
+fi
+echo "$(date '+%Y-%m-%d %H:%M:%S') - [watcher] Started (source: ${detection_source}, tailing ${TAIL_TARGET})" >> "${block_log_file}"
+
+tail ${TAIL_ARGS} "${TAIL_TARGET}" | while read -r line; do
+  if [ "${detection_source}" == "pf" ]; then
+    # ---- native pipeline: one raw pf block line from filter.log ----
+    case $line in *filterlog*:*) ;; *) continue ;; esac
+    payload=${line##*filterlog*: }
+    # filterlog payload fields: 4=rule 5=iface 6=reason 7=action 8=direction
+    # 9=ip version 17=protocol 19=src 20=dst 21=src port 22=dst port
+    IFS=',' read -r _ _ _ rule in_iface reason action direction ipver _ _ _ _ _ _ _ proto _ src_ip dst_ip src_port dst_port _ <<< "${payload}"
+    # Only inbound blocked IPv4 traffic is an attacker signal
+    [ "${direction}" == "in" ] || continue
+    case ${action} in pass) continue ;; esac
+    [ "${ipver}" == "4" ] || continue
+    # Aggregate blocks per IP over the native window; stay silent per block
+    now_epoch=$(date +%s)
+    pf_first_ip=${pf_first[${src_ip}]:-0}
+    if [ "${pf_first_ip}" -eq 0 ] || [ $((now_epoch - pf_first_ip)) -gt ${native_window} ]; then
+      pf_first[${src_ip}]=${now_epoch}
+      pf_blocks[${src_ip}]=0
+    fi
+    pf_blocks[${src_ip}]=$(( ${pf_blocks[${src_ip}]:-0} + 1 ))
+    [ "${pf_blocks[${src_ip}]}" -ge "${native_threshold}" ] || continue
+    # Per-IP report cooldown
+    if [ $((now_epoch - ${pf_reported[${src_ip}]:-0})) -lt ${report_cooldown:-900} ]; then
+      continue
+    fi
+    pf_reported[${src_ip}]=${now_epoch}
+    block_log_count=${pf_blocks[${src_ip}]}
+    ip_block_logged="yes"
+    pf_blocks[${src_ip}]=0
+    pf_first[${src_ip}]=0
+    # Shape the event into the shared report path (suricata variable names)
+    ip=${src_ip}
+    ports=${src_port}
+    signature="pf firewall block (rule ${rule})"
+    signature_category="PF"
+    message="pf block (${reason}) ${proto} ${src_ip}:${src_port} -> ${dst_ip}:${dst_port}"
+    category="pf"
+    severity=""
+    event_type="filterlog"
+    flow_id=""
+    pkt_src=""
+    direction="to_server"
+    whois_contact_email=""
+    abipdb_category="${native_category}"
+    xarf_category_type="reconnaissance"
+    xarf_category="connection"
+    timestamp=${now_epoch}
+    datetime=$(date '+%Y-%m-%d %H:%M:%S')
+    abuseipdb_report_time=$(date +"%Y-%m-%dT%H:%M:%S%z")
+    logs=$(tail -c 10485760 "${FILTER_LOG}" 2>/dev/null | grep -F "${ip}" || true)
+    comment="${detection_label} ${block_log_count} blocked packets from ${ip} within ${native_window}s (threshold ${native_threshold}); ${message}; Category: ${abipdb_category}"
+  else
   # Parsing Json file via jq;
   # @tsv keeps values intact even when they contain commas; tabs are mapped
   # to the unit separator so read preserves empty fields.
@@ -203,6 +280,7 @@ Abuse email     : ${whois_contact_email}
     fi
 
   fi
+  fi
   wan_ip=$(ifconfig $wan | grep 'inet ' | awk '{print $2}')
   # Use custom whitelists on pfsense
   if [[ $(command -v 'pfctl') ]]; then
@@ -245,6 +323,12 @@ Abuse email     : ${whois_contact_email}
     xarf_category="connection"
     shopt -s nocasematch
     case $signature_category in
+      PF)
+        # Native mode: firewall blocks carry no ET signature category
+        abipdb_category="${native_category}"
+        xarf_category_type="reconnaissance"
+        xarf_category="connection"
+        ;;
       3CORESec)
         abipdb_category="21"
         xarf_category_type="login_attack"
@@ -544,25 +628,27 @@ Abuse email     : ${whois_contact_email}
         echo "IP has not been logged in the MySQL database ${mysql_database}"
       fi
     fi
-    if grep -qF "${ip}" "${block_log_file}" 2>/dev/null
-    then
-      # Count the number of distributed attacks
-      block_log_count=$(grep -cF "${ip}" "${block_log_file}" || true)
-      echo "IP has been logged ${block_log_count} times in the ${block_log_file}"
-      ip_block_logged="yes"
-    else
-      echo "IP has not been logged in the ${block_log_file}"
-      ip_block_logged="no"
-      block_log_count=0
+    if [ "${detection_source}" != "pf" ]; then
+      if grep -qF "${ip}" "${block_log_file}" 2>/dev/null
+      then
+        # Count the number of distributed attacks
+        block_log_count=$(grep -cF "${ip}" "${block_log_file}" || true)
+        echo "IP has been logged ${block_log_count} times in the ${block_log_file}"
+        ip_block_logged="yes"
+      else
+        echo "IP has not been logged in the ${block_log_file}"
+        ip_block_logged="no"
+        block_log_count=0
+      fi
+
+      # Debug output for tracing
+      # category=$(determine_category $signature_category "$message")
+      # category_names=$(convert_category_to_names "$abipdb_category")
+      log_operation "Trigger: ${signature_category}, Category: ${category}"
     fi
 
-    # Debug output for tracing
-    # category=$(determine_category $signature_category "$message")
-    # category_names=$(convert_category_to_names "$abipdb_category")
-    log_operation "Trigger: ${signature_category}, Category: ${category}"
-
     if [ "$ip_block_logged" = "yes" ]; then
-      if [ "${block_log_count:-0}" -gt "${report_limit}" ]; then
+      if [ "${detection_source}" == "pf" ] || [ "${block_log_count:-0}" -gt "${report_limit}" ]; then
         # Skip if the IP was already reported within the cooldown window
         if [ "${report_cooldown:-900}" -gt 0 ]; then
           last_reported=$(grep "Reporting IP: ${ip} with comment" "${block_log_file}" 2>/dev/null | tail -n 1 | awk '{print $1, $2}') || true
@@ -584,9 +670,14 @@ Abuse email     : ${whois_contact_email}
         # fresh evidence and keeps X-ARF payloads sane)
         # Full-file evidence grep (X-ARF payload); reports are rare after the
         # cooldown, so the scan cost is acceptable
-        logs=$(grep -F "${ip}" "${ALERTS_FILE}" 2>/dev/null || true)
-        # Construct the comment string for other triggers
-        comment="${detection_label} ${block_log_count} attacks from $ip.; ${message}; IP: ${ip}; Ports: ${ports}; Direction: ${direction}; Trigger: ${signature_category}; Category: ${category}; Severity: ${severity}"
+        if [ "${detection_source}" == "pf" ]; then
+          # pf mode already prepared comment/counts/logs at the loop top
+          :
+        else
+          logs=$(grep -F "${ip}" "${ALERTS_FILE}" 2>/dev/null || true)
+          # Construct the comment string for other triggers
+          comment="${detection_label} ${block_log_count} attacks from $ip.; ${message}; IP: ${ip}; Ports: ${ports}; Direction: ${direction}; Trigger: ${signature_category}; Category: ${category}; Severity: ${severity}"
+        fi
 
         ABUSEIPDB_CHECK=$(curl -sG https://api.abuseipdb.com/api/v2/check \
             --data-urlencode "ipAddress=$ip" \
@@ -746,7 +837,7 @@ Conditions for detection:
 - AbuseIPDB Confidence Score ${abuseipdb_confidence_score} is higher than limit ${abuseipdb_confidense_score_limit}
 - IP has been logged ${block_log_count} times, and is higher than email report limit ${email_report_limit}
 
-Software: Suricata on pfsense
+Software: ${detection_software} on pfsense
 
 This report is sendt to the abuse email provided in the WHOIS information provided on the reported IP address.
 

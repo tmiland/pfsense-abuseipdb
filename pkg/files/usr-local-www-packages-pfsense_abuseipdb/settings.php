@@ -44,6 +44,9 @@ $fields = array(
     'max_table_entries' => array('Max table entries', 'number', 'Hard cap on the block table so a flood cannot exhaust memory.', 'protection'),
     'protection_report' => array('Report banned IPs', 'select', 'File an AbuseIPDB report for every banned IP (max 1 per IP per 15 minutes).', 'protection'),
     'protection_report_category' => array('Report category', 'number', 'AbuseIPDB category for protection reports. 14 = Port Scan, 4 = DDoS Attack.', 'protection'),
+    'native_threshold' => array('Native report threshold', 'number', 'pf mode only: firewall blocks per source IP within the window before an AbuseIPDB report is filed.', 'protection'),
+    'native_window' => array('Native window (seconds)', 'number', 'pf mode only: length of the native reporting window.', 'protection'),
+    'native_category' => array('Native report category', 'number', 'pf mode only: AbuseIPDB category for native reports. 14 = Port Scan.', 'protection'),
     'pfsense_token' => array('pfSense API token', 'secret', 'Used by the (optional) filterlog section.', 'general'),
     'pfsense_url' => array('pfSense API URL', 'text', '', 'general'),
     'gmail_app_password' => array('Gmail app password', 'secret', 'Reserved for future use.', 'general'),
@@ -138,6 +141,9 @@ function pfsense_abuseipdb_gen_ini($v) {
         "max_table_entries={$v['max_table_entries']}\n" .
         "protection_report={$v['protection_report']}\n" .
         "protection_report_category={$v['protection_report_category']}\n" .
+        "native_threshold={$v['native_threshold']}\n" .
+        "native_window={$v['native_window']}\n" .
+        "native_category={$v['native_category']}\n" .
         "domain={$v['domain']}\n" .
         "mysql_host={$v['mysql_host']}\n" .
         "mysql_user={$v['mysql_user']}\n" .
@@ -194,7 +200,10 @@ foreach (array(
     'ban_time' => '86400',
     'max_table_entries' => '2000',
     'protection_report' => 'yes',
-    'protection_report_category' => '14'
+    'protection_report_category' => '14',
+    'native_threshold' => '25',
+    'native_window' => '600',
+    'native_category' => '14'
 ) as $dkey => $dval) {
     if ($vals[$dkey] === '') {
         $vals[$dkey] = $dval;
