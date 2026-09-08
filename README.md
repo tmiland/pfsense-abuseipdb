@@ -76,8 +76,13 @@ That's it — the watcher starts automatically and appears under
 5. Maps the ET signature category to AbuseIPDB category codes and X-ARF types
 6. Once an IP has more than `report_limit` block-log entries, is outside its
    `report_cooldown` window, and has AbuseIPDB confidence above
-   `abuseipdb_confidense_score_limit`: file the report, insert into MySQL,
-   optionally email the WHOIS abuse contact, and send an X-ARF report
+   `abuseipdb_confidense_score_limit`: file the report (comments carry a
+   credit link back to this repo), insert into MySQL, optionally email the
+   WHOIS abuse contact, and send an X-ARF report
+
+AbuseIPDB report errors and invalid X-ARF payloads can fire a pfSense
+notification (all configured channels, throttled to one per hour) via the
+`notifications` setting.
 
 ## Requirements
 
@@ -102,12 +107,27 @@ only holds paths to credential files under `/root/.credentials/`:
 
 Key groups: log paths and WAN interface, reporting thresholds
 (`report_limit`, `abuseipdb_confidense_score_limit`, `report_cooldown`),
-MySQL connection and toggles (`use_mysql`, `show_ip_info`,
-`show_ip_abusedb_email`), abuse email settings (`send_abuse_email_report`,
-SMTP host/port/from), X-ARF settings (`send_xarf_report`, org/contact/domain),
-and `suricata_whitelists` (comma-separated pf table names). See
+secrets, MySQL connection and toggles (`use_mysql`, `show_ip_info`,
+`show_ip_abusedb_email`), notifications (`notifications`), abuse email
+settings (`send_abuse_email_report`, SMTP host/port/from), X-ARF settings
+(`send_xarf_report`, org/contact/domain), and `suricata_whitelists`
+(comma-separated pf table names). See
 [`example_pfsense_abuseipdb.ini`](example_pfsense_abuseipdb.ini) for every
 key with comments.
+
+### Secrets
+
+Secrets (AbuseIPDB/ipinfo tokens, MySQL and SMTP passwords, Abusix key) are
+entered in the **Settings** page (masked inputs, never echoed back) and
+stored in the pfSense config. On save they are written into the package ini
+(chmod 0600); empty secret fields keep their stored value, and secrets still
+sitting in legacy `/root/.credentials/` files are migrated in automatically
+— the package also migrates them on install/upgrade. The `*_file` ini keys
+remain as a fallback read only when the value is empty.
+
+> Heads-up: pfSense config backups (AutoConfigBackup) will include these
+> values. If you prefer secrets to never leave the box, keep using the
+> legacy credential files and leave the fields blank.
 
 ## Web UI
 
