@@ -5,8 +5,11 @@
  * Settings page for the AbuseIPDB Suricata Watcher package. Values are
  * stored in config.xml (installedpackages/pfsense_abuseipdb/settings) and
  * generated into the package ini on save, then the service is restarted.
- * Secrets are never entered here: the *_file keys point at credential
- * files under /root/.credentials/.
+ * Secrets are entered here (masked) and stored in config.xml; on save,
+ * empty secret fields keep their existing value, and secrets still only
+ * present in legacy credential files under /root/.credentials/ are
+ * migrated in automatically. The generated ini is chmod 0600 since it
+ * then contains the secrets.
  */
 require_once("guiconfig.inc");
 
@@ -20,20 +23,21 @@ $fields = array(
     'block_log_file' => array('Block log path', 'text', 'Per-IP detection log that drives the reporting threshold.'),
     'wan' => array('WAN interface', 'text', 'Interface name, e.g. igb0.'),
     /* AbuseIPDB */
-    'abuseipdb_token_file' => array('AbuseIPDB token file', 'text', 'Path to the AbuseIPDB API token.'),
+    'abuseipdb_token' => array('AbuseIPDB API token', 'secret', 'Reported comments carry a link back to the project.'),
     'abuseipdb_user_id' => array('AbuseIPDB user id', 'text', 'Your AbuseIPDB account id.'),
     'report_limit' => array('Report limit', 'number', 'Detections in the block log required before an IP is reported.'),
     'abuseipdb_confidense_score_limit' => array('Confidence score limit', 'number', 'AbuseIPDB confidence score required to file a report (past 90 days).'),
     'report_cooldown' => array('Report cooldown (seconds)', 'number', 'Minimum seconds between reports for the same IP. 0 disables the cooldown.'),
+    'notifications' => array('pfSense notifications', 'select', 'Notify the admin via System > Advanced > Notifications channels on report errors (max 1 per hour).'),
     /* Mysql */
     'use_mysql' => array('Use MySQL', 'select', 'Log every report to MySQL.'),
     'domain' => array('Domain', 'text', 'Local domain used in reports.'),
     'mysql_host' => array('MySQL host', 'text', ''),
     'mysql_user' => array('MySQL user', 'text', ''),
-    'mysql_password_file' => array('MySQL password file', 'text', 'Path to the database password file.'),
+    'mysql_password' => array('MySQL password', 'secret', 'Migrated from the legacy password file on save.'),
     'mysql_database' => array('MySQL database', 'text', ''),
     /* ipinfo */
-    'ipinfo_token_file' => array('ipinfo token file', 'text', ''),
+    'ipinfo_token' => array('ipinfo token', 'secret', ''),
     'show_ip_info' => array('Show IP info', 'select', 'GeoIP lookup for each alert.'),
     'show_ip_abusedb_email' => array('Show abuse contact', 'select', 'WHOIS abuse-mailbox lookup for each alert.'),
     /* Email */
@@ -41,20 +45,20 @@ $fields = array(
     'email_report_limit' => array('Email report limit', 'number', 'Detections required before an abuse email is sent.'),
     'report_name' => array('Report name', 'text', 'Display name of the email sender.'),
     'report_email' => array('Report email', 'text', 'From address for abuse emails.'),
-    'abuseip_email_password_file' => array('Abuse email password file', 'text', 'Path to the SMTP password file.'),
+    'abuse_email_password' => array('Abuse email password', 'secret', 'SMTP password for abuse email reports.'),
     'report_smtp_host' => array('SMTP host', 'text', ''),
     'report_smtp_port' => array('SMTP port', 'number', ''),
     /* X-ARF */
     'send_xarf_report' => array('Send X-ARF reports', 'select', 'Report to abusix via X-ARF.'),
-    'xarf_token_file' => array('X-ARF token file', 'text', 'Path to the Abusix API key file.'),
+    'xarf_token' => array('X-ARF API key', 'secret', 'Abusix datachannels API key.'),
     'xarf_org' => array('X-ARF org', 'text', ''),
     'xarf_contact' => array('X-ARF contact', 'text', 'Abuse contact address sent with X-ARF reports.'),
     'xarf_domain' => array('X-ARF domain', 'text', ''),
     /* Whitelists + misc */
     'suricata_whitelists' => array('Whitelist pf tables', 'text', 'Comma-separated pf table names used to whitelist source IPs.'),
-    'pfsense_token_file' => array('pfSense API token file', 'text', 'Used by the (optional) filterlog section.'),
+    'pfsense_token' => array('pfSense API token', 'secret', 'Used by the (optional) filterlog section.'),
     'pfsense_url' => array('pfSense API URL', 'text', ''),
-    'gmail_app_password_file' => array('Gmail app password file', 'text', 'Reserved for future use.')
+    'gmail_app_password' => array('Gmail app password', 'secret', 'Reserved for future use.')
 );
 
 /* Yes/no toggles render as selects. */
@@ -63,6 +67,18 @@ foreach ($fields as $key => $f) {
     if ($f[1] == 'select') {
         $yesno_keys[] = $key;
     }
+}
+
+function pfsense_abuseipdb_ini_value($file, $key) {
+    if (!file_exists($file)) {
+        return '';
+    }
+    foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        if (preg_match('/^([a-z_]+)=(.*)$/', $line, $m) && $m[1] === $key) {
+            return $m[2];
+        }
+    }
+    return '';
 }
 
 function pfsense_abuseipdb_read_ini($file, $keys) {
@@ -79,13 +95,14 @@ function pfsense_abuseipdb_read_ini($file, $keys) {
 
 function pfsense_abuseipdb_gen_ini($v) {
     return "; pfsense_abuseipdb.ini - generated by the pfSense package settings page\n" .
-        "pfsense_token_file={$v['pfsense_token_file']}\n" .
-        "abuseipdb_token_file={$v['abuseipdb_token_file']}\n" .
-        "ipinfo_token_file={$v['ipinfo_token_file']}\n" .
-        "gmail_app_password_file={$v['gmail_app_password_file']}\n" .
-        "mysql_password_file={$v['mysql_password_file']}\n" .
-        "abuseip_email_password_file={$v['abuseip_email_password_file']}\n" .
-        "xarf_token_file={$v['xarf_token_file']}\n" .
+        "; contains secrets - keep chmod 600\n" .
+        "pfsense_token={$v['pfsense_token']}\n" .
+        "abuseipdb_token={$v['abuseipdb_token']}\n" .
+        "ipinfo_token={$v['ipinfo_token']}\n" .
+        "gmail_app_password={$v['gmail_app_password']}\n" .
+        "mysql_password={$v['mysql_password']}\n" .
+        "abuse_email_password={$v['abuse_email_password']}\n" .
+        "xarf_token={$v['xarf_token']}\n" .
         "pfsense_url={$v['pfsense_url']}\n" .
         "alerts_file={$v['alerts_file']}\n" .
         "block_log_file={$v['block_log_file']}\n" .
@@ -94,6 +111,7 @@ function pfsense_abuseipdb_gen_ini($v) {
         "report_limit={$v['report_limit']}\n" .
         "abuseipdb_confidense_score_limit={$v['abuseipdb_confidense_score_limit']}\n" .
         "report_cooldown={$v['report_cooldown']}\n" .
+        "notifications={$v['notifications']}\n" .
         "domain={$v['domain']}\n" .
         "mysql_host={$v['mysql_host']}\n" .
         "mysql_user={$v['mysql_user']}\n" .
@@ -113,6 +131,17 @@ function pfsense_abuseipdb_gen_ini($v) {
         "xarf_domain={$v['xarf_domain']}\n" .
         "suricata_whitelists={$v['suricata_whitelists']}\n";
 }
+
+/* Legacy credential-file keys (fallback + migration source) */
+$secret_file_keys = array(
+    'abuseipdb_token' => 'abuseipdb_token_file',
+    'ipinfo_token' => 'ipinfo_token_file',
+    'mysql_password' => 'mysql_password_file',
+    'abuse_email_password' => 'abuseip_email_password_file',
+    'xarf_token' => 'xarf_token_file',
+    'pfsense_token' => 'pfsense_token_file',
+    'gmail_app_password' => 'gmail_app_password_file'
+);
 
 /* Initial values: config.xml settings first, then the live ini as fallback. */
 $vals = array();
@@ -148,6 +177,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         $new[$key] = $val;
     }
+    /* Secrets: empty input keeps the stored value; if none is stored yet,
+       migrate it in from the legacy credential file. */
+    foreach ($secret_file_keys as $vk => $fk) {
+        if ($new[$vk] === '') {
+            $new[$vk] = $vals[$vk] ?? '';
+        }
+        if ($new[$vk] === '') {
+            $path = pfsense_abuseipdb_ini_value($ini_file, $fk);
+            if ($path !== '' && is_readable($path)) {
+                $new[$vk] = trim(file_get_contents($path));
+            }
+        }
+    }
     foreach (array('alerts_file', 'block_log_file', 'wan') as $req) {
         if ($new[$req] === '') {
             $input_errors[] = sprintf(gettext('%s is required.'), $fields[$req][0]);
@@ -162,7 +204,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         config_set_path('installedpackages/pfsense_abuseipdb/settings', $new);
         write_config("AbuseIPDB package settings updated");
         file_put_contents($ini_file, pfsense_abuseipdb_gen_ini($new));
-        chmod($ini_file, 0644);
+        chmod($ini_file, 0600);
         mwexec_bg("/usr/local/etc/rc.d/pfsense_abuseipdb restart");
         $saved = true;
         $vals = $new;
@@ -216,6 +258,8 @@ if (!empty($input_errors)) {
 									<option value="yes" <?= ($vals[$key] == 'yes') ? 'selected' : '' ?>><?= gettext('yes') ?></option>
 									<option value="no" <?= ($vals[$key] != 'yes') ? 'selected' : '' ?>><?= gettext('no') ?></option>
 								</select>
+<?php elseif ($f[1] == 'secret'): ?>
+								<input class="form-control" type="password" name="<?= htmlspecialchars($key) ?>" value="" autocomplete="new-password" placeholder="<?= ($vals[$key] !== '') ? gettext('(stored - leave blank to keep)') : gettext('(blank - migrated from legacy file on save)') ?>" />
 <?php else: ?>
 								<input class="form-control" type="text" name="<?= htmlspecialchars($key) ?>" value="<?= htmlspecialchars($vals[$key]) ?>" autocomplete="off" />
 <?php endif ?>
@@ -234,7 +278,7 @@ if (!empty($input_errors)) {
 				<i class="fa fa-save icon-embed-btn"></i><?= gettext('Save and restart watcher') ?>
 			</button>
 			<span class="help-block">
-				<?= gettext('Credential fields hold file paths only - the actual secrets stay in the files under /root/.credentials/.') ?>
+				<?= gettext('Secrets are stored in the pfSense config (masked here, never echoed back). Leave a secret blank to keep its stored value; secrets still living in /root/.credentials/ files are migrated in automatically on save. Note: pfSense config backups (AutoConfigBackup) will include these values.') ?>
 			</span>
 		</div>
 	</div>

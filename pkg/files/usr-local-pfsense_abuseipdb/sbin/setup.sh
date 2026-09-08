@@ -4,8 +4,6 @@
 # packages installed through the web UI) and migrates an existing ini.
 
 PKG_BASE="/usr/local/pfsense_abuseipdb"
-SCRIPT="${PKG_BASE}/bin/pfsense_abuseipdb.sh"
-PKG_NAME="pfSense-pkg-abuseipdb"
 
 register_config() {
   php <<'PHP'
@@ -93,12 +91,35 @@ write_config("Removed pfSense-pkg-abuseipdb: unregistered service and menu");
 PHP
 }
 
+migrate_secret() {
+  # Copy a secret from its legacy credential file into the ini (value key),
+  # unless the value key is already present.
+  ini="${PKG_BASE}/etc/pfsense_abuseipdb.ini"
+  vkey="$1"
+  fkey="$2"
+  [ -f "$ini" ] || return 0
+  grep -q "^${vkey}=" "$ini" && return 0
+  fpath=$(sed -n "s/^${fkey}=//p" "$ini" | head -1)
+  [ -n "$fpath" ] && [ -r "$fpath" ] || return 0
+  printf '%s=%s\n' "$vkey" "$(cat "$fpath")" >> "$ini"
+}
+
 case "$1" in
 install)
   # Migrate the real ini from the old manual location if it exists.
   if [ -f /root/scripts/pfsense_abuseipdb.ini ] && [ ! -f "${PKG_BASE}/etc/pfsense_abuseipdb.ini" ]; then
     cp -p /root/scripts/pfsense_abuseipdb.ini "${PKG_BASE}/etc/pfsense_abuseipdb.ini"
   fi
+  # Migrate secrets from the legacy credential files into the ini.
+  migrate_secret abuseipdb_token abuseipdb_token_file
+  migrate_secret ipinfo_token ipinfo_token_file
+  migrate_secret mysql_password mysql_password_file
+  migrate_secret abuse_email_password abuseip_email_password_file
+  migrate_secret xarf_token xarf_token_file
+  migrate_secret pfsense_token pfsense_token_file
+  migrate_secret gmail_app_password gmail_app_password_file
+  # The ini now carries secrets: lock it down.
+  [ -f "${PKG_BASE}/etc/pfsense_abuseipdb.ini" ] && chmod 600 "${PKG_BASE}/etc/pfsense_abuseipdb.ini"
   register_config
   # Replace any watcher started from the old manual location, then start
   # the packaged one.

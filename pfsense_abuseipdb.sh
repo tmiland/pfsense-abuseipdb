@@ -19,16 +19,29 @@ config_grep() {
   sed -n "s/^$1=//p" "$config_file"
 }
 
-# Credentials (PFSENSE_* and GMAIL_APP_PASS are reserved for the optional
-# filterlog section)
+config_secret() {
+  # Prefer the value key; fall back to the legacy credential-file key.
+  local value file
+  value=$(config_grep "$1")
+  if [ -z "${value}" ]; then
+    file=$(config_grep "$2")
+    if [ -n "${file}" ] && [ -r "${file}" ]; then
+      value=$(< "${file}")
+    fi
+  fi
+  printf '%s' "${value}"
+}
+
+# Credentials (entered in the web UI settings, stored in config.xml; the
+# *_file keys remain as a legacy fallback)
 # shellcheck disable=SC2034
-PFSENSE_TOKEN=$(< "$(config_grep pfsense_token_file)")
+PFSENSE_TOKEN=$(config_secret pfsense_token pfsense_token_file)
 # shellcheck disable=SC2034
 PFSENSE_URL=$(config_grep pfsense_url)
-ABUSEIPDB_TOKEN=$(< "$(config_grep abuseipdb_token_file)")
-IPINFO_TOKEN=$(< "$(config_grep ipinfo_token_file)")
+ABUSEIPDB_TOKEN=$(config_secret abuseipdb_token abuseipdb_token_file)
+IPINFO_TOKEN=$(config_secret ipinfo_token ipinfo_token_file)
 # shellcheck disable=SC2034
-GMAIL_APP_PASS=$(< "$(config_grep gmail_app_password_file)")
+GMAIL_APP_PASS=$(config_secret gmail_app_password gmail_app_password_file)
 
 # Suricata
 ALERTS_FILE=$(config_grep alerts_file)
@@ -41,12 +54,13 @@ abuseipdb_user_id=$(config_grep abuseipdb_user_id)
 report_limit=$(config_grep report_limit)
 abuseipdb_confidense_score_limit=$(config_grep abuseipdb_confidense_score_limit)
 report_cooldown=$(config_grep report_cooldown)
+notifications=$(config_grep notifications)
 
 # Mysql database
 domain=$(config_grep domain)
 mysql_host=$(config_grep mysql_host)
 mysql_user=$(config_grep mysql_user)
-mysql_password=$(< "$(config_grep mysql_password_file)")
+mysql_password=$(config_secret mysql_password mysql_password_file)
 mysql_database=$(config_grep mysql_database)
 use_mysql=$(config_grep use_mysql)
 show_ip_info=$(config_grep show_ip_info)
@@ -55,14 +69,14 @@ show_ip_abusedb_email=$(config_grep show_ip_abusedb_email)
 # Email settings
 send_abuse_email_report=$(config_grep send_abuse_email_report)
 email_report_limit=$(config_grep email_report_limit)
-ABUSEIP_EMAIL_PASS=$(< "$(config_grep abuseip_email_password_file)")
+ABUSEIP_EMAIL_PASS=$(config_secret abuse_email_password abuseip_email_password_file)
 report_name=$(config_grep report_name)
 report_email=$(config_grep report_email)
 report_smtp_host=$(config_grep report_smtp_host)
 report_smtp_port=$(config_grep report_smtp_port)
 
 # X-ARF
-xarf_token=$(< "$(config_grep xarf_token_file)")
+xarf_token=$(config_secret xarf_token xarf_token_file)
 send_xarf_report=$(config_grep send_xarf_report)
 xarf_org=$(config_grep xarf_org)
 xarf_contact=$(config_grep xarf_contact)
@@ -489,6 +503,26 @@ Abuse email     : ${whois_contact_email}
       echo "$datetime - $message" >> $block_log_file
     }
 
+    pf_notify() {
+      # Fire a pfSense notification (all configured channels), throttled to
+      # one per hour to avoid spam during alert storms.
+      local message=$1
+      [ "${notifications}" == "yes" ] || return 0
+      local throttle_file="/var/db/pfsense_abuseipdb_notify.last"
+      local now_epoch last_epoch
+      now_epoch=$(date +%s)
+      last_epoch=0
+      [ -r "${throttle_file}" ] && last_epoch=$(< "${throttle_file}")
+      if [ "$((now_epoch - last_epoch))" -lt 3600 ]; then
+        return 0
+      fi
+      echo "${now_epoch}" > "${throttle_file}"
+      message=${message//\'/}
+      message=${message//\"/}
+      /usr/local/bin/php -r "require_once('/etc/inc/notices.inc'); notify_all_remote('${message}');" >/dev/null 2>&1 || true
+      log_operation "Notification sent: ${message}"
+    }
+
     if [ "${use_mysql}" == "yes" ]
     then
       # mysqli_query_count
@@ -587,12 +621,14 @@ Abuse email     : ${whois_contact_email}
         # then
         log_operation "Reporting IP: ${ip} with comment: ${comment}"
 
-        # Truncate comment
-        # Source: https://linuxgenie.net/truncate-string-variable-in-bash
-        if [[ ${#comment} -gt 1024 ]]; then
-          log_operation "Truncated comment to 1024 characters..."
-          comment=${comment:0:1024}
+        # Append the project credit and keep the AbuseIPDB 1024-char limit
+        report_credit="Reported by pfsense-abuseipdb: https://github.com/tmiland/pfsense-abuseipdb"
+        max_comment=$((1024 - ${#report_credit} - 1))
+        if [[ ${#comment} -gt ${max_comment} ]]; then
+          log_operation "Truncated comment to ${max_comment} characters..."
+          comment=${comment:0:max_comment}
         fi
+        comment="${comment} ${report_credit}"
 
         # Send report
         ABUSEIPDB_RESPONSE=$(curl -s https://api.abuseipdb.com/api/v2/report \
@@ -614,6 +650,7 @@ Abuse email     : ${whois_contact_email}
           echo "Status: ${ABUSEIPDB_STATUS}"
           echo "Message: ${ABUSEIPDB_DETAIL}"
           log_operation "ERROR! Something went wrong. Status: ${ABUSEIPDB_STATUS} Message: ${ABUSEIPDB_DETAIL}"
+          pf_notify "pfsense-abuseipdb: AbuseIPDB report error for ${ip}. Status: ${ABUSEIPDB_STATUS} Message: ${ABUSEIPDB_DETAIL}"
           continue
         else
           # Parse and log the ABUSEIPDB_RESPONSE
@@ -767,6 +804,7 @@ ${report_email}" | tee "${email_tmp}" >/dev/null 2>&1
               log_operation "X-ARF Response: $xarf_response"
             else
               log_operation "JSON is invalid"
+              pf_notify "pfsense-abuseipdb: X-ARF report JSON invalid for ${ip}"
             fi
           fi
         fi
