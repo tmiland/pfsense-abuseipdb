@@ -637,6 +637,10 @@ Abuse email     : ${whois_contact_email}
         max_comment=$((1024 - ${#report_credit} - 1))
         if [ -n "${logs}" ]; then
           last_log=$(printf '%s\n' "${logs}" | tail -n 1)
+          # Human-readable log excerpt for the comment (full JSON stays in
+          # the X-ARF evidence and the reports log)
+          last_log_fmt=$(printf '%s' "${last_log}" | jq -r '"time=\(.timestamp // "?") sig=\(.alert.signature // "?") src=\(.src_ip // "?"):\(.src_port // "?") dst=\(.dest_ip // "?"):\(.dest_port // "?") proto=\(.proto // "?") action=\(.alert.action // "?") category=\(.alert.category // "?") severity=\(.alert.severity // "?")"' 2>/dev/null) || true
+          [ -n "${last_log_fmt}" ] && last_log="${last_log_fmt}"
           logs_budget=$((max_comment - ${#comment} - 8))
           if [ ${logs_budget} -gt 40 ]; then
             logs_start=$(( ${#last_log} > logs_budget ? ${#last_log} - logs_budget : 0 ))

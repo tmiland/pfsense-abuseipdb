@@ -42,6 +42,8 @@ $fields = array(
     'protection_window' => array('Burst window (seconds)', 'number', 'Length of the sliding detection window.', 'protection'),
     'ban_time' => array('Ban time (seconds)', 'number', 'How long an offender stays in the block table (pf expiry).', 'protection'),
     'max_table_entries' => array('Max table entries', 'number', 'Hard cap on the block table so a flood cannot exhaust memory.', 'protection'),
+    'protection_report' => array('Report banned IPs', 'select', 'File an AbuseIPDB report for every banned IP (max 1 per IP per 15 minutes).', 'protection'),
+    'protection_report_category' => array('Report category', 'number', 'AbuseIPDB category for protection reports. 14 = Port Scan, 4 = DDoS Attack.', 'protection'),
     'pfsense_token' => array('pfSense API token', 'secret', 'Used by the (optional) filterlog section.', 'general'),
     'pfsense_url' => array('pfSense API URL', 'text', '', 'general'),
     'gmail_app_password' => array('Gmail app password', 'secret', 'Reserved for future use.', 'general'),
@@ -134,6 +136,8 @@ function pfsense_abuseipdb_gen_ini($v) {
         "protection_window={$v['protection_window']}\n" .
         "ban_time={$v['ban_time']}\n" .
         "max_table_entries={$v['max_table_entries']}\n" .
+        "protection_report={$v['protection_report']}\n" .
+        "protection_report_category={$v['protection_report_category']}\n" .
         "domain={$v['domain']}\n" .
         "mysql_host={$v['mysql_host']}\n" .
         "mysql_user={$v['mysql_user']}\n" .
@@ -188,7 +192,9 @@ foreach (array(
     'protection_threshold' => '50',
     'protection_window' => '60',
     'ban_time' => '86400',
-    'max_table_entries' => '2000'
+    'max_table_entries' => '2000',
+    'protection_report' => 'yes',
+    'protection_report_category' => '14'
 ) as $dkey => $dval) {
     if ($vals[$dkey] === '') {
         $vals[$dkey] = $dval;

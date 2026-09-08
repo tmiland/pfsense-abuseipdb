@@ -54,6 +54,12 @@ protection_threshold=${protection_threshold:-50}
 protection_window=${protection_window:-60}
 ban_time=${ban_time:-86400}
 max_table_entries=${max_table_entries:-2000}
+protection_report=${protection_report:-yes}
+protection_report_category=${protection_report_category:-14}
+abuseipdb_token=$(config_secret abuseipdb_token abuseipdb_token_file)
+reports_log="/var/log/abuseipdb_reports.log"
+
+declare -A reported_at
 
 wan_ip=$(ifconfig "${wan}" 2>/dev/null | grep 'inet ' | awk '{print $2}') || true
 
@@ -120,6 +126,36 @@ is_whitelisted() {
   return 1
 }
 
+report_banned() {
+  # Report the banned IP to AbuseIPDB (per-IP cooldown 15 minutes to respect
+  # the API limit). Recorded in the reports log for the web UI.
+  local ip=$1 blocks=$2
+  [ "${protection_report}" == "yes" ] || return 0
+  [ -n "${abuseipdb_token}" ] || return 0
+  local now_epoch last
+  now_epoch=$(date +%s)
+  last=${reported_at[${ip}]:-0}
+  if [ $((now_epoch - last)) -lt 900 ]; then
+    return 0
+  fi
+  reported_at[${ip}]=${now_epoch}
+  local label="pf Firewall Detected"
+  [ "${detection_source}" == "suricata" ] && label="Suricata Detected"
+  local comment="${label} ${blocks} blocked packets from ${ip} within ${protection_window}s (burst threshold ${protection_threshold}); banned for ${ban_time}s. Reported by pfsense-abuseipdb: https://github.com/tmiland/pfsense-abuseipdb"
+  local response
+  response=$(curl -s --max-time 20 https://api.abuseipdb.com/api/v2/report \
+      --data-urlencode "ip=${ip}" \
+      -d categories="${protection_report_category:-14}" \
+      --data-urlencode "comment=${comment}" \
+      -H "Key: ${abuseipdb_token}" \
+    -H "Accept: application/json") || true
+  jq -nc --arg time "$(date '+%Y-%m-%d %H:%M:%S')" --arg ip "${ip}" \
+    --arg categories "${protection_report_category:-14}" --arg comment "${comment}" \
+    --arg abuse "${response}" \
+    '{time: $time, ip: $ip, categories: $categories, comment: $comment, abuseipdb: (try ($abuse | fromjson) catch null), xarf: null, source: "protection"}' >> "${reports_log}" 2>/dev/null || true
+  log_operation "AbuseIPDB report sent for banned ${ip} (category ${protection_report_category:-14})"
+}
+
 count_hit() {
   local ip=$1 now_epoch
   now_epoch=$(date +%s)
@@ -153,6 +189,7 @@ count_hit() {
     fi
     if table_add "${ip}"; then
       blocked_until[${ip}]=$((now_epoch + ban_time))
+      report_banned "${ip}" "${count}"
     fi
     hits[${ip}]="0|${now_epoch}"
   fi
