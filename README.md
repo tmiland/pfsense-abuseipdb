@@ -230,3 +230,9 @@ the pfSense package pipeline, and the web UI pages.
 ## License
 
 [MIT](LICENSE)
+
+---
+
+Built with [opencode](https://opencode.ai/go?ref=00KNXXSB00) — the open-source
+AI coding agent for the terminal. Grab your own at
+[opencode.ai/go](https://opencode.ai/go?ref=00KNXXSB00).
