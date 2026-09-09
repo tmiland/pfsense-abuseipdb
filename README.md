@@ -22,6 +22,8 @@
   <img src="docs/screenshots/status-overview.png" alt="Status overview" width="920">
 </p>
 
+
+**Full write-up on the blog:** https://tmiland.com/pfsense-abuseipdb/
 ## Features
 
 - **DDoS protection engine** — burst-detects attackers from native pf firewall events (no Suricata required) or the Suricata alert stream, and bans them via a pf table with automatic expiry, whitelist awareness and a hard entry cap
