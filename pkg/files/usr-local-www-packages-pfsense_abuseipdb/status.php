@@ -77,7 +77,12 @@ $today = date('Y-m-d');
 $stats = array('reported' => 0, 'xarf_ok' => 0, 'errors' => 0);
 
 if (file_exists($block_log)) {
-    exec("/usr/bin/tail -n 300 " . escapeshellarg($block_log) . " 2>/dev/null", $lines);
+    /* Widen the raw-line window when a filter is active: rarer buckets
+       (X-ARF, errors) get crowded out of the first few hundred lines by
+       far more frequent watcher/protect chatter, so a naive global cap
+       would silently show fewer than 100 matching rows. */
+    $tail_lines = ($filter !== '') ? 5000 : 300;
+    exec("/usr/bin/tail -n " . $tail_lines . " " . escapeshellarg($block_log) . " 2>/dev/null", $lines);
     foreach (array_reverse($lines) as $line) {
         if (!preg_match('/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (.*)$/', $line, $m)) {
             continue;
@@ -102,13 +107,22 @@ if (file_exists($block_log)) {
                 $stats['errors']++;
             }
         }
+        /* Only count a row toward the displayed cap if it matches the
+           active filter (or there is no filter) - otherwise unrelated
+           lines fill the cap before 100 matching rows are ever found. */
+        if ($filter !== '' && $bucket !== $filter) {
+            continue;
+        }
         $events[] = array('ts' => $m[1], 'class' => $type, 'bucket' => $bucket, 'msg' => $m[2]);
         if (count($events) >= 100) {
             break;
         }
     }
 }
-$events = array_reverse($events);
+/* $events was collected newest-first (we walked the tailed lines in
+   reverse) so the table shows the most recent event at the top. Do NOT
+   array_reverse() here - that previously flipped it back to oldest-first,
+   making the top row look like stale "last event" data. */
 
 /* Theme-agnostic styling: inherit colors so both light and dark themes work. */
 ?>
@@ -234,7 +248,9 @@ $subtabs = array(
 						</tr>
 					</thead>
 					<tbody>
-<?php $shown = 0; foreach ($events as $e): if ($filter !== '' && $e['bucket'] !== $filter) { continue; } $shown++; ?>
+<?php /* $events is already filtered to the active bucket (if any) during
+         collection above, so no further per-row filter check is needed
+         here. */ $shown = 0; foreach ($events as $e): $shown++; ?>
 						<tr>
 							<td style="white-space: nowrap;"><?= htmlspecialchars($e['ts']) ?></td>
 							<td class="<?= ($e['class'] == 'error') ? 'abuseipdb-error' : (($e['class'] == 'muted') ? 'abuseipdb-muted' : '') ?>">

@@ -313,6 +313,16 @@ Abuse email     : ${whois_contact_email}
       echo "IPv6 source address ${src_ip} - reporting not supported yet. Skipping..."
       continue
     fi
+    # LAN/private sources are not internet attackers - never report them
+    # (same guard as the protection engine's is_private)
+    if [[ "${src_ip}" =~ ^10\. ]] || [[ "${src_ip}" =~ ^192\.168\. ]] || \
+       [[ "${src_ip}" =~ ^127\. ]] || [[ "${src_ip}" =~ ^169\.254\. ]] || \
+       [[ "${src_ip}" =~ ^172\.(1[6-9]|2[0-9]|3[01])\. ]] || \
+       [[ "${src_ip}" =~ ^100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\. ]]
+    then
+      echo "Source IP ${src_ip} is a private/LAN address - skipping report"
+      continue
+    fi
     # Get category from signature (pf native events keep the pre-set
     # signature_category=PF; their signature text has no ET trigger word)
     if [ "${detection_source}" != "pf" ]; then

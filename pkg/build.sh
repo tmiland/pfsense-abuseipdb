@@ -25,6 +25,10 @@ install -m 0755 "$PKGDIR/files/usr-local-pfsense_abuseipdb/bin/pfsense_abuseipdb
 install -m 0644 "$REPO/example_pfsense_abuseipdb.ini" "$STAGE/$PBASE/etc/example_pfsense_abuseipdb.ini"
 install -m 0644 "$PKGDIR/files/usr-local-pfsense_abuseipdb/share/pfsense_abuseipdb.xml" \
 	"$STAGE/$PBASE/share/pfsense_abuseipdb.xml"
+# pfSense packagegui XML (menu + service registration source for
+# install_package_xml); /usr/local/pkg is where pfSense expects it
+install -m 0644 "$PKGDIR/files/usr-local-pfsense_abuseipdb/share/pfsense_abuseipdb.xml" \
+	"$STAGE/usr/local/pkg/pfsense_abuseipdb.xml"
 install -m 0644 "$PKGDIR/files/usr-local-pfsense_abuseipdb/share/sync_protection.php" \
 	"$STAGE/$PBASE/share/sync_protection.php"
 install -m 0755 "$PKGDIR/files/usr-local-pfsense_abuseipdb/sbin/setup.sh" \
@@ -49,6 +53,23 @@ php -l "$STAGE/usr/local/www/widgets/include/abuseipdb.inc" >/dev/null
 
 VERSION=$(sed -n 's/.*<version>\([^<]*\)<.*/\1/p' "$STAGE/$PBASE/share/pfsense_abuseipdb.xml" | head -1)
 ABI=$(pkg config abi)
+
+# pfSense package registration data: install_package_xml() requires
+# /usr/local/share/pfSense-pkg-<name>/info.xml or the package never lands in
+# installedpackages/package and rc.start_packages cannot boot-start it.
+mkdir -p "$STAGE/usr/local/share/pfSense-pkg-abuseipdb"
+cat > "$STAGE/usr/local/share/pfSense-pkg-abuseipdb/info.xml" <<EOF
+<?xml version="1.0"?>
+<pfsensepkgs>
+    <package>
+        <name>abuseipdb</name>
+        <website>https://github.com/tmiland/pfsense-abuseipdb</website>
+        <descr><![CDATA[AbuseIPDB Suricata alert watcher for pfSense.]]></descr>
+        <version>${VERSION}</version>
+        <configurationfile>pfsense_abuseipdb.xml</configurationfile>
+    </package>
+</pfsensepkgs>
+EOF
 NAME="pfSense-pkg-abuseipdb"
 ORIGIN="security/pfSense-pkg-abuseipdb"
 

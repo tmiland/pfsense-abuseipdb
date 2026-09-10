@@ -2,7 +2,7 @@
 <!DOCTYPE packagegui SYSTEM "../schema/packages.dtd">
 <packagegui>
 	<name>pfsense_abuseipdb</name>
-	<version>0.8.9</version>
+	<version>0.9.0</version>
 	<title>AbuseIPDB Watcher</title>
 	<menu>
 		<name>AbuseIPDB</name>
