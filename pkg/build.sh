@@ -17,7 +17,8 @@ PBASE="usr/local/pfsense_abuseipdb"
 WBASE="usr/local/www/packages/pfsense_abuseipdb"
 mkdir -p "$STAGE/$PBASE/bin" "$STAGE/$PBASE/etc" "$STAGE/$PBASE/sbin" \
 	"$STAGE/$PBASE/share" "$STAGE/$WBASE" "$STAGE/usr/local/etc/rc.d" \
-	"$STAGE/usr/local/www/widgets/include" "$STAGE/usr/local/www/widgets/widgets"
+	"$STAGE/usr/local/www/widgets/include" "$STAGE/usr/local/www/widgets/widgets" \
+	"$STAGE/usr/local/pkg" "$STAGE/usr/local/share/pfSense-pkg-abuseipdb"
 
 install -m 0755 "$REPO/pfsense_abuseipdb.sh" "$STAGE/$PBASE/bin/pfsense_abuseipdb.sh"
 install -m 0755 "$PKGDIR/files/usr-local-pfsense_abuseipdb/bin/pfsense_abuseipdb_protect.sh" \
